@@ -40,6 +40,7 @@ export default function Home() {
   const [flyerBlob, setFlyerBlob] = useState<Blob | null>(null);
   const [generatingFlyer, setGeneratingFlyer] = useState(false);
   const [refreshingReports, setRefreshingReports] = useState(false);
+  const [refreshingBoard, setRefreshingBoard] = useState(false);
   const [me, setMe] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
@@ -131,6 +132,12 @@ export default function Home() {
     finally { setRefreshingReports(false); }
   }
 
+  async function openBoard() {
+    setRefreshingBoard(true);
+    try { if (await loadBoard()) setTab("board"); }
+    finally { setRefreshingBoard(false); }
+  }
+
   async function copyFlyer() {
     if (!flyerBlob) return;
     try {
@@ -168,7 +175,7 @@ export default function Home() {
     <div className="sports-strip" aria-label="Datos principales de la quiniela"><div><span className="mini-football" aria-hidden="true"/><strong>17</strong><small>Juegos MNF</small></div><div><span className="yard-icon" aria-hidden="true">50</span><strong>100</strong><small>Casillas</small></div><div><span className="trophy-icon" aria-hidden="true">★</span><strong>$100</strong><small>Por casilla</small></div><div><span className="heart-icon" aria-hidden="true">♥</span><strong>1</strong><small>Gran causa</small></div></div>
 
     <nav className="tabs" aria-label="Secciones">
-      <button className={tab === "board" ? "active" : ""} onClick={() => setTab("board")}><span>▦</span> Tablero</button>
+      <button className={tab === "board" ? "active" : ""} onClick={openBoard} disabled={refreshingBoard} aria-busy={refreshingBoard}><span>▦</span> {refreshingBoard ? "Actualizando…" : "Tablero"}</button>
       <button className={tab === "games" ? "active" : ""} onClick={() => setTab("games")}><span>◷</span> Juegos</button>
       <button className={tab === "reports" ? "active" : ""} onClick={openReports} disabled={refreshingReports} aria-busy={refreshingReports}><span>≡</span> {refreshingReports ? "Actualizando…" : "Reportes"}</button>
       <button className={tab === "rules" ? "active" : ""} onClick={() => setTab("rules")}><span>i</span> Reglas</button>
