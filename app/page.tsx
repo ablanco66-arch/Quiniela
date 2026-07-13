@@ -130,9 +130,8 @@ export default function Home() {
   return (
     <main>
       <header className="topbar">
-        <div className="brand-mark" aria-hidden="true"><span>R</span></div>
+        <img className="club-logo header-logo" src="/logo-crjc.png" alt="Rotary Juárez Concordia" />
         <div className="brand-copy">
-          <p>Rotary Juárez Concordia</p>
           <h1>Quiniela MNF <span>2026</span></h1>
         </div>
         <div className="season-badge"><span>Temporada</span><strong>14 SEP — 4 ENE</strong></div>
@@ -217,7 +216,7 @@ export default function Home() {
       {tab === "games" && <Games />}
       {tab === "rules" && <Rules />}
 
-      <footer><div className="mini-mark">R</div><p><strong>Rotary Juárez Concordia</strong><br/>Genera un impacto duradero</p><span>Actualizado 12 julio 2026</span></footer>
+      <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 12 julio 2026</span></footer>
 
       {selected && <SquareModal square={selected} saving={saving} onClose={() => setSelected(null)} onSave={saveSquare} />}
       {showDigits && (
