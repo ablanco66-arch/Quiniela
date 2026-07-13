@@ -256,9 +256,8 @@ async function createFlyer(squares: Square[]) {
 
   roundedBox(ctx,80,466,920,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; ctx.font=`400 27px ${displayFont}`; ctx.fillText("$100 USD POR CASILLA   •   $300 USD POR JUEGO   •   17 JUEGOS",540,518);
 
-  const counts={available:squares.filter(s=>s.status==="available").length,reserved:squares.filter(s=>s.status==="reserved").length,paid:squares.filter(s=>s.status==="paid").length};
-  const legend=[{label:`${counts.available} DISPONIBLES`,color:cream,text:navy},{label:`${counts.reserved} RESERVADAS`,color:gold,text:navy},{label:`${counts.paid} PAGADAS`,color:green,text:white}];
-  let lx=98; ctx.textAlign="left"; for(const item of legend){ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font=`400 22px ${displayFont}`;ctx.fillText(item.label,lx+34,596);lx+=item.label.length*14+72;}
+  const legend=[{label:"DISPONIBLE",color:cream,text:navy},{label:"RESERVADA",color:gold,text:navy},{label:"PAGADA",color:green,text:white}];
+  ctx.textAlign="left"; legend.forEach((item,index)=>{const lx=154+index*285;ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font=`400 22px ${displayFont}`;ctx.fillText(item.label,lx+34,596);});
 
   const gridX=90, gridY=625, cell=84, gap=6;
   roundedBox(ctx,68,603,944,944,26,"#03112be8",gold,4);
