@@ -39,6 +39,7 @@ export default function Home() {
   const [flyerUrl, setFlyerUrl] = useState("");
   const [flyerBlob, setFlyerBlob] = useState<Blob | null>(null);
   const [generatingFlyer, setGeneratingFlyer] = useState(false);
+  const [refreshingReports, setRefreshingReports] = useState(false);
   const [me, setMe] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
@@ -47,19 +48,20 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
-  async function loadBoard() {
+  async function loadBoard(): Promise<Square[] | null> {
     try {
       const response = await fetch("/api/board", { cache: "no-store" });
       const data = await response.json();
-      if (response.status === 401) { setAccessState("signin"); return; }
-      if (response.status === 403) { setAccessEmail(data.email ?? ""); setAccessState("denied"); return; }
+      if (response.status === 401) { setAccessState("signin"); return null; }
+      if (response.status === 403) { setAccessEmail(data.email ?? ""); setAccessState("denied"); return null; }
       if (!response.ok) throw new Error(data.error || "No fue posible cargar el tablero");
       setSquares(data.squares); setVisitorDigits(data.settings.visitorDigits ?? ""); setHomeDigits(data.settings.homeDigits ?? "");
       setMe(data.me); setMembers(data.members ?? []); setActivity(data.activity ?? []); setAccessState("ready");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "No pudimos conectar con el tablero."); }
+      return data.squares as Square[];
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No pudimos conectar con el tablero."); return null; }
   }
 
-  useEffect(() => { loadBoard(); }, []);
+  useEffect(() => { void loadBoard(); }, []);
 
   const counts = useMemo(() => ({ available:squares.filter((s) => s.status === "available").length, reserved:squares.filter((s) => s.status === "reserved").length, paid:squares.filter((s) => s.status === "paid").length }), [squares]);
   const report = useMemo(() => {
@@ -115,10 +117,18 @@ export default function Home() {
   async function openFlyer() {
     setGeneratingFlyer(true);
     try {
-      const result = await createFlyer(squares);
+      const latestSquares = await loadBoard();
+      if (!latestSquares) return;
+      const result = await createFlyer(latestSquares);
       setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
     } catch { setNotice("No fue posible generar el flier. Intenta nuevamente."); }
     finally { setGeneratingFlyer(false); }
+  }
+
+  async function openReports() {
+    setRefreshingReports(true);
+    try { if (await loadBoard()) setTab("reports"); }
+    finally { setRefreshingReports(false); }
   }
 
   async function copyFlyer() {
@@ -160,7 +170,7 @@ export default function Home() {
     <nav className="tabs" aria-label="Secciones">
       <button className={tab === "board" ? "active" : ""} onClick={() => setTab("board")}><span>▦</span> Tablero</button>
       <button className={tab === "games" ? "active" : ""} onClick={() => setTab("games")}><span>◷</span> Juegos</button>
-      <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}><span>≡</span> Reportes</button>
+      <button className={tab === "reports" ? "active" : ""} onClick={openReports} disabled={refreshingReports} aria-busy={refreshingReports}><span>≡</span> {refreshingReports ? "Actualizando…" : "Reportes"}</button>
       <button className={tab === "rules" ? "active" : ""} onClick={() => setTab("rules")}><span>i</span> Reglas</button>
     </nav>
 
