@@ -242,36 +242,38 @@ function Rules(){ const rules=[["$100 USD por casilla","El apoyo debe cubrirse t
 async function createFlyer(squares: Square[]) {
   const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1920;
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas no disponible");
+  const styles=getComputedStyle(document.body), displayFont=styles.getPropertyValue("--font-display").trim()||"Arial Black", bodyFont=styles.getPropertyValue("--font-body").trim()||"Arial";
   const navy = "#061b3e", blue = "#123a78", gold = "#f7b500", green = "#168553", cream = "#fff8e5", white = "#ffffff";
-  const background = ctx.createLinearGradient(0,0,1080,1920); background.addColorStop(0,"#04142f"); background.addColorStop(.55,navy); background.addColorStop(1,"#0b3268"); ctx.fillStyle=background; ctx.fillRect(0,0,1080,1920);
-  ctx.save(); ctx.globalAlpha=.08; ctx.strokeStyle=white; ctx.lineWidth=3; for(let y=30;y<1920;y+=90){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1080,y);ctx.stroke();} for(let x=90;x<1080;x+=180){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,1920);ctx.stroke();} ctx.restore();
+  const stadium = await loadCanvasImage("/flyer-stadium-bg.png"); ctx.drawImage(stadium,0,0,1080,1920);
+  const shade=ctx.createLinearGradient(0,0,0,1920);shade.addColorStop(0,"#020a1dcc");shade.addColorStop(.46,"#061b3e99");shade.addColorStop(.78,"#031128b8");shade.addColorStop(1,"#02091866");ctx.fillStyle=shade;ctx.fillRect(0,0,1080,1920);
+  ctx.save(); ctx.globalAlpha=.09; ctx.strokeStyle=gold; ctx.lineWidth=2; for(let y=34;y<780;y+=92){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1080,y);ctx.stroke();} ctx.restore();
   ctx.fillStyle=gold; ctx.fillRect(0,0,1080,14); ctx.fillRect(0,1906,1080,14);
 
   const logo = await loadCanvasImage("/logo-crjc-white-gold.png"); const logoW=480, logoH=logoW*(logo.height/logo.width); ctx.drawImage(logo,(1080-logoW)/2,34,logoW,logoH);
-  ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font="800 28px Arial"; ctx.fillText("QUINIELA MNF 2026",540,305);
-  ctx.fillStyle=white; ctx.font="900 70px Arial"; ctx.fillText("JUEGA. GANA. AYUDA.",540,382);
-  ctx.fillStyle=cream; ctx.font="500 29px Arial"; ctx.fillText("Aparta una casilla y transforma cada lunes en una buena causa.",540,430);
+  ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font=`400 30px ${displayFont}`; ctx.fillText("QUINIELA MNF 2026",540,305);
+  ctx.fillStyle=white; ctx.font=`400 72px ${displayFont}`; ctx.fillText("JUEGA. GANA. AYUDA.",540,382);
+  ctx.fillStyle=cream; ctx.font=`600 29px ${bodyFont}`; ctx.fillText("Aparta una casilla y transforma cada lunes en una buena causa.",540,430);
 
-  roundedBox(ctx,80,466,920,82,18,"#0d2b5d",gold,3); ctx.fillStyle=white; ctx.font="800 27px Arial"; ctx.fillText("$100 USD POR CASILLA   •   $300 USD POR JUEGO   •   17 JUEGOS",540,518);
+  roundedBox(ctx,80,466,920,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; ctx.font=`400 27px ${displayFont}`; ctx.fillText("$100 USD POR CASILLA   •   $300 USD POR JUEGO   •   17 JUEGOS",540,518);
 
   const counts={available:squares.filter(s=>s.status==="available").length,reserved:squares.filter(s=>s.status==="reserved").length,paid:squares.filter(s=>s.status==="paid").length};
   const legend=[{label:`${counts.available} DISPONIBLES`,color:cream,text:navy},{label:`${counts.reserved} RESERVADAS`,color:gold,text:navy},{label:`${counts.paid} PAGADAS`,color:green,text:white}];
-  let lx=98; ctx.textAlign="left"; for(const item of legend){ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font="800 22px Arial";ctx.fillText(item.label,lx+34,596);lx+=item.label.length*14+72;}
+  let lx=98; ctx.textAlign="left"; for(const item of legend){ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font=`400 22px ${displayFont}`;ctx.fillText(item.label,lx+34,596);lx+=item.label.length*14+72;}
 
   const gridX=90, gridY=625, cell=84, gap=6;
-  roundedBox(ctx,68,603,944,944,26,"#03112b",gold,4);
-  squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font="900 29px Arial";ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
+  roundedBox(ctx,68,603,944,944,26,"#03112be8",gold,4);
+  squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`400 29px ${displayFont}`;ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
 
-  ctx.textAlign="left"; ctx.fillStyle=gold; ctx.font="900 30px Arial"; ctx.fillText("REGLAS DEL JUEGO",82,1592);
+  ctx.textAlign="left"; ctx.fillStyle=gold; ctx.font=`400 32px ${displayFont}`; ctx.fillText("REGLAS DEL JUEGO",82,1592);
   const rules=[
     ["1", "$100 USD por casilla. Pago total antes del 14 de septiembre de 2026."],
     ["2", "$300 USD por cada juego participante; tienes 17 oportunidades de ganar."],
     ["3", "Los números se sortean al inicio de temporada y permanecen ocultos hasta entonces."],
     ["4", "Cuenta el marcador final, incluidos tiempos extra, usando la unidad de cada equipo."],
   ];
-  rules.forEach(([number,text],index)=>{const y=1632+index*54;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,y-8,20,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font="900 22px Arial";ctx.fillText(number,100,y);ctx.fillStyle=white;ctx.textAlign="left";ctx.font="600 20px Arial";drawWrappedText(ctx,text,136,y,820,23);});
-  ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font="800 15px Arial";ctx.fillText("NO PAGADAS NO JUEGAN  •  SI GANA UNA NO VENDIDA, EL PREMIO QUEDA EN EL CLUB  •  SOLO JUEGOS LISTADOS",540,1842);
-  roundedBox(ctx,70,1860,940,42,13,gold,null,0); ctx.fillStyle=navy; ctx.textAlign="center"; ctx.font="900 24px Arial"; ctx.fillText("¡PARTICIPA HOY Y APOYA PROYECTOS QUE CAMBIAN VIDAS!",540,1889);
+  rules.forEach(([number,text],index)=>{const y=1632+index*54;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,y-8,20,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font=`400 22px ${displayFont}`;ctx.fillText(number,100,y);ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`600 20px ${bodyFont}`;drawWrappedText(ctx,text,136,y,820,23);});
+  ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font=`800 15px ${bodyFont}`;ctx.fillText("NO PAGADAS NO JUEGAN  •  SI GANA UNA NO VENDIDA, EL PREMIO QUEDA EN EL CLUB  •  SOLO JUEGOS LISTADOS",540,1842);
+  roundedBox(ctx,70,1860,940,42,13,gold,null,0); ctx.fillStyle=navy; ctx.textAlign="center"; ctx.font=`400 24px ${displayFont}`; ctx.fillText("¡PARTICIPA HOY Y APOYA PROYECTOS QUE CAMBIAN VIDAS!",540,1889);
   const blob = await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));
   return { blob, url:canvas.toDataURL("image/png") };
 }
