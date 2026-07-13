@@ -35,6 +35,10 @@ export default function Home() {
   const [filter, setFilter] = useState<"all" | Status>("all");
   const [selected, setSelected] = useState<Square | null>(null);
   const [showDigits, setShowDigits] = useState(false);
+  const [showFlyer, setShowFlyer] = useState(false);
+  const [flyerUrl, setFlyerUrl] = useState("");
+  const [flyerBlob, setFlyerBlob] = useState<Blob | null>(null);
+  const [generatingFlyer, setGeneratingFlyer] = useState(false);
   const [me, setMe] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
@@ -108,6 +112,32 @@ export default function Home() {
     finally { setSaving(false); }
   }
 
+  async function openFlyer() {
+    setGeneratingFlyer(true);
+    try {
+      const result = await createFlyer(squares);
+      setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
+    } catch { setNotice("No fue posible generar el flier. Intenta nuevamente."); }
+    finally { setGeneratingFlyer(false); }
+  }
+
+  async function copyFlyer() {
+    if (!flyerBlob) return;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": flyerBlob })]);
+      setNotice("Flier copiado. Ya puedes pegarlo en WhatsApp.");
+    } catch { downloadFlyer(flyerBlob); setNotice("Tu dispositivo no permite copiar imágenes; el flier se descargó."); }
+  }
+
+  async function shareFlyer() {
+    if (!flyerBlob) return;
+    const file = new File([flyerBlob], "quiniela-mnf-2026.png", { type:"image/png" });
+    try {
+      if (navigator.share && navigator.canShare?.({ files:[file] })) await navigator.share({ title:"Quiniela MNF 2026", text:"¡Participa por una buena causa! Aparta tu casilla de la Quiniela MNF 2026.", files:[file] });
+      else await copyFlyer();
+    } catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) setNotice("No fue posible compartir; puedes copiar o descargar el flier."); }
+  }
+
   if (accessState !== "ready") return <AccessScreen state={accessState} email={accessEmail} />;
   const filteredIds = new Set(squares.filter((square) => filter === "all" || square.status === filter).map((square) => square.id));
 
@@ -137,7 +167,7 @@ export default function Home() {
     {notice && <button className="notice" onClick={() => setNotice("")} aria-label="Cerrar aviso">{notice}<span>×</span></button>}
 
     {tab === "board" && <section className="content board-section">
-      <div className="section-heading"><div><p className="kicker">Tablero oficial · 100 casillas</p><h3>Elige tu número de la suerte</h3></div>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div>
+      <div className="section-heading"><div><p className="kicker">Tablero oficial · 100 casillas</p><h3>Elige tu número de la suerte</h3></div><div className="heading-actions"><button className="flyer-button" onClick={openFlyer} disabled={generatingFlyer}>{generatingFlyer ? "Generando…" : "🏈 Generar flier"}</button>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div></div>
       <div className="summary-grid">
         <button className={filter === "available" ? "summary active" : "summary"} onClick={() => setFilter(filter === "available" ? "all" : "available")}><span className="dot available"/><div><strong>{counts.available}</strong><small>Disponibles</small></div></button>
         <button className={filter === "reserved" ? "summary active" : "summary"} onClick={() => setFilter(filter === "reserved" ? "all" : "reserved")}><span className="dot reserved"/><div><strong>{counts.reserved}</strong><small>Reservadas</small></div></button>
@@ -161,6 +191,7 @@ export default function Home() {
     <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
 
     {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} onClose={() => setSelected(null)} onSave={saveSquare} />}
+    {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">Listo para compartir</p><h3 id="flyer-title">Flier de la quiniela</h3><p>La imagen refleja el estado actual del tablero.</p></div><div className="flyer-preview"><img src={flyerUrl} alt="Flier vertical de la Quiniela MNF 2026 con tablero y reglas"/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob)}>Guardar PNG</button></div></section></div>}
     {showDigits && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowDigits(false)}><section className="modal digits-modal" role="dialog" aria-modal="true" aria-labelledby="digits-title"><button className="modal-close" onClick={() => setShowDigits(false)} aria-label="Cerrar">×</button><p className="kicker">Inicio de temporada</p><h3 id="digits-title">Números de juego</h3><p className="modal-help">Déjalos vacíos hasta el sorteo. Después, ingresa los 10 dígitos en el orden asignado.</p><label>Columnas — visitante<input value={visitorDigits} onChange={(e) => setVisitorDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 7451029863" /></label><label>Renglones — casa<input value={homeDigits} onChange={(e) => setHomeDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 0294831756" /></label><div className="modal-actions"><button className="secondary" onClick={() => {setVisitorDigits("");setHomeDigits("");}}>Limpiar</button><button className="primary" onClick={saveDigits} disabled={saving}>{saving ? "Guardando…" : "Guardar números"}</button></div></section></div>}
   </main>;
 }
@@ -207,6 +238,48 @@ function Reports({ rows, squares, activity, me, members, saving, onSaveMember, o
 function Games(){ return <section className="content games-section"><div className="section-heading"><div><p className="kicker">Calendario oficial</p><h3>17 lunes de emoción</h3></div><span className="year-pill">2026–27</span></div><div className="games-list">{games.map((game,index)=><article className="game" key={`${game.date}-${game.visitor}`}><div className="game-number"><span>JUEGO</span><strong>{String(index+1).padStart(2,"0")}</strong></div><div className="game-date">{game.date}</div><div className="matchup"><div><small>VISITANTE</small><strong>{game.visitor}</strong></div><span>@</span><div><small>CASA</small><strong>{game.home}</strong></div></div><div className="monday">LUN<br/>7:00</div></article>)}</div></section>; }
 
 function Rules(){ const rules=[["$100 USD por casilla","El apoyo debe cubrirse totalmente antes del 14 de septiembre de 2026."],["$300 USD por juego","Puedes ganar cada vez que tu marcador resulte premiado durante los 17 juegos."],["Los números se revelan al inicio","Las casillas se eligen al azar. Los dígitos permanecen ocultos hasta iniciar la temporada."],["Cuenta el marcador final","Se consideran tiempos extras y solamente la unidad del resultado de cada equipo."]]; return <section className="content rules-section"><div className="section-heading"><div><p className="kicker">Cómo se juega</p><h3>Reglas claras, diversión grande</h3></div></div><div className="rules-grid">{rules.map(([title,body],index)=><article key={title}><span>{index+1}</span><div><h4>{title}</h4><p>{body}</p></div></article>)}</div><div className="example"><span className="example-tag">EJEMPLO</span><h4>Visitante 17 — Casa 10</h4><p>Gana la casilla donde la columna <strong>7</strong> cruza con el renglón <strong>0</strong>.</p><div className="score-example"><div><small>VISITANTE</small><strong>17</strong></div><span>→</span><div className="winning-square"><small>CASILLA</small><strong>7 × 0</strong></div><span>←</span><div><small>CASA</small><strong>10</strong></div></div></div><div className="warnings"><p>Las casillas no pagadas totalmente no juegan.</p><p>Si gana una casilla no vendida, el premio se queda en el club.</p><p>Solo participan los juegos aquí listados.</p></div></section>; }
+
+async function createFlyer(squares: Square[]) {
+  const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1920;
+  const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas no disponible");
+  const navy = "#061b3e", blue = "#123a78", gold = "#f7b500", green = "#168553", cream = "#fff8e5", white = "#ffffff";
+  const background = ctx.createLinearGradient(0,0,1080,1920); background.addColorStop(0,"#04142f"); background.addColorStop(.55,navy); background.addColorStop(1,"#0b3268"); ctx.fillStyle=background; ctx.fillRect(0,0,1080,1920);
+  ctx.save(); ctx.globalAlpha=.08; ctx.strokeStyle=white; ctx.lineWidth=3; for(let y=30;y<1920;y+=90){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1080,y);ctx.stroke();} for(let x=90;x<1080;x+=180){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,1920);ctx.stroke();} ctx.restore();
+  ctx.fillStyle=gold; ctx.fillRect(0,0,1080,14); ctx.fillRect(0,1906,1080,14);
+
+  const logo = await loadCanvasImage("/logo-crjc-white-gold.png"); const logoW=480, logoH=logoW*(logo.height/logo.width); ctx.drawImage(logo,(1080-logoW)/2,34,logoW,logoH);
+  ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font="800 28px Arial"; ctx.fillText("QUINIELA MNF 2026",540,305);
+  ctx.fillStyle=white; ctx.font="900 70px Arial"; ctx.fillText("JUEGA. GANA. AYUDA.",540,382);
+  ctx.fillStyle=cream; ctx.font="500 29px Arial"; ctx.fillText("Aparta una casilla y transforma cada lunes en una buena causa.",540,430);
+
+  roundedBox(ctx,80,466,920,82,18,"#0d2b5d",gold,3); ctx.fillStyle=white; ctx.font="800 27px Arial"; ctx.fillText("$100 USD POR CASILLA   •   $300 USD POR JUEGO   •   17 JUEGOS",540,518);
+
+  const counts={available:squares.filter(s=>s.status==="available").length,reserved:squares.filter(s=>s.status==="reserved").length,paid:squares.filter(s=>s.status==="paid").length};
+  const legend=[{label:`${counts.available} DISPONIBLES`,color:cream,text:navy},{label:`${counts.reserved} RESERVADAS`,color:gold,text:navy},{label:`${counts.paid} PAGADAS`,color:green,text:white}];
+  let lx=98; ctx.textAlign="left"; for(const item of legend){ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font="800 22px Arial";ctx.fillText(item.label,lx+34,596);lx+=item.label.length*14+72;}
+
+  const gridX=90, gridY=625, cell=84, gap=6;
+  roundedBox(ctx,68,603,944,944,26,"#03112b",gold,4);
+  squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font="900 29px Arial";ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
+
+  ctx.textAlign="left"; ctx.fillStyle=gold; ctx.font="900 30px Arial"; ctx.fillText("REGLAS DEL JUEGO",82,1592);
+  const rules=[
+    ["1", "$100 USD por casilla. Pago total antes del 14 de septiembre de 2026."],
+    ["2", "$300 USD por cada juego participante; tienes 17 oportunidades de ganar."],
+    ["3", "Los números se sortean al inicio de temporada y permanecen ocultos hasta entonces."],
+    ["4", "Cuenta el marcador final, incluidos tiempos extra, usando la unidad de cada equipo."],
+  ];
+  rules.forEach(([number,text],index)=>{const y=1632+index*54;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,y-8,20,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font="900 22px Arial";ctx.fillText(number,100,y);ctx.fillStyle=white;ctx.textAlign="left";ctx.font="600 20px Arial";drawWrappedText(ctx,text,136,y,820,23);});
+  ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font="800 15px Arial";ctx.fillText("NO PAGADAS NO JUEGAN  •  SI GANA UNA NO VENDIDA, EL PREMIO QUEDA EN EL CLUB  •  SOLO JUEGOS LISTADOS",540,1842);
+  roundedBox(ctx,70,1860,940,42,13,gold,null,0); ctx.fillStyle=navy; ctx.textAlign="center"; ctx.font="900 24px Arial"; ctx.fillText("¡PARTICIPA HOY Y APOYA PROYECTOS QUE CAMBIAN VIDAS!",540,1889);
+  const blob = await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));
+  return { blob, url:canvas.toDataURL("image/png") };
+}
+
+function roundedBox(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number,fill:string,stroke:string|null,width:number){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke();}}
+function drawWrappedText(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,maxWidth:number,lineHeight:number){const words=text.split(" ");let line="",lineY=y;for(const word of words){const test=`${line}${word} `;if(line&&ctx.measureText(test).width>maxWidth){ctx.fillText(line.trim(),x,lineY);line=`${word} `;lineY+=lineHeight;}else line=test;}if(line)ctx.fillText(line.trim(),x,lineY);}
+function loadCanvasImage(src:string){return new Promise<HTMLImageElement>((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error("No se pudo cargar el logo"));image.src=src;});}
+function downloadFlyer(blob:Blob){const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="quiniela-mnf-2026.png";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 function isOwned(square:Square,me:Member){ return Boolean(square.reservedByEmail) && square.reservedByEmail.toLowerCase()===me.email.toLowerCase(); }
 function labelFor(status:Status){ return status==="available"?"Disponible":status==="reserved"?"Reservada":"Pagada"; }
