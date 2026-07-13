@@ -165,7 +165,7 @@ export default function Home() {
 
   return <main>
     <header className="topbar">
-      <img className="club-logo header-logo" src="/logo-crjc.png" alt="Rotary Juárez Concordia" />
+      <img className="club-logo header-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" />
       <div className="brand-copy"><h1>Quiniela MNF <span>2026</span></h1></div>
       <div className="account-chip"><div><strong>{me?.name}</strong><span>{roleLabel(me?.role ?? "user")}</span></div><a href="/signout-with-chatgpt?return_to=%2F" aria-label="Cerrar sesión">Salir</a></div>
     </header>
@@ -210,7 +210,7 @@ export default function Home() {
     {tab === "rules" && <Rules />}
     {tab === "reports" && <Reports rows={report} squares={squares} activity={activity} me={me!} members={members} saving={saving} generatingFlyer={generatingFlyer} onGenerateFlyer={openReportFlyer} onSaveMember={saveMember} onRemoveMember={removeMember} />}
 
-    <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
+    <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
 
     {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} onClose={() => setSelected(null)} onSave={saveSquare} />}
     {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">Listo para compartir</p><h3 id="flyer-title">{flyerType==="report"?"Flier de avance":"Flier de la quiniela"}</h3><p>{flyerType==="report"?"El reporte refleja el avance más reciente por socio.":"La imagen refleja el estado actual del tablero."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="report"?"Flier del avance de casillas por socio":"Flier vertical de la Quiniela MNF 2026 con tablero y reglas"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>Guardar PNG</button></div></section></div>}
