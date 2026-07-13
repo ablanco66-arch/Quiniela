@@ -12,6 +12,7 @@ type Square = {
 type Member = { email: string; name: string; role: Role; active: number };
 type Activity = { id: number; squareId: number | null; action: string; actorName: string; actorRole: Role; previousStatus: string; newStatus: string; details: string; createdAt: string };
 type Game = { date: string; visitor: string; home: string };
+type ReportRow = { name:string; reserved:number; paid:number; total:number };
 
 const games: Game[] = [
   { date: "14 sep", visitor: "Denver Broncos", home: "Kansas City Chiefs" }, { date: "21 sep", visitor: "New York Giants", home: "Los Angeles Rams" },
@@ -38,6 +39,7 @@ export default function Home() {
   const [showFlyer, setShowFlyer] = useState(false);
   const [flyerUrl, setFlyerUrl] = useState("");
   const [flyerBlob, setFlyerBlob] = useState<Blob | null>(null);
+  const [flyerType, setFlyerType] = useState<"board"|"report">("board");
   const [generatingFlyer, setGeneratingFlyer] = useState(false);
   const [refreshingReports, setRefreshingReports] = useState(false);
   const [refreshingBoard, setRefreshingBoard] = useState(false);
@@ -65,16 +67,7 @@ export default function Home() {
   useEffect(() => { void loadBoard(); }, []);
 
   const counts = useMemo(() => ({ available:squares.filter((s) => s.status === "available").length, reserved:squares.filter((s) => s.status === "reserved").length, paid:squares.filter((s) => s.status === "paid").length }), [squares]);
-  const report = useMemo(() => {
-    const rows = new Map<string, { name:string; reserved:number; paid:number; total:number }>();
-    squares.filter((square) => square.status !== "available").forEach((square) => {
-      const name = square.reservedByName || square.contact || "Sin asignar";
-      const row = rows.get(name) ?? { name, reserved:0, paid:0, total:0 };
-      if (square.status === "reserved") row.reserved += 1; else row.paid += 1;
-      row.total += 1; rows.set(name, row);
-    });
-    return [...rows.values()].sort((a,b) => b.total - a.total || a.name.localeCompare(b.name));
-  }, [squares]);
+  const report = useMemo(() => buildReportRows(squares), [squares]);
 
   async function put(payload: Record<string, unknown>) {
     const response = await fetch("/api/board", { method:"PUT", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(payload) });
@@ -121,7 +114,7 @@ export default function Home() {
       const latestSquares = await loadBoard();
       if (!latestSquares) return;
       const result = await createFlyer(latestSquares);
-      setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
+      setFlyerType("board"); setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
     } catch { setNotice("No fue posible generar el flier. Intenta nuevamente."); }
     finally { setGeneratingFlyer(false); }
   }
@@ -138,19 +131,31 @@ export default function Home() {
     finally { setRefreshingBoard(false); }
   }
 
+  async function openReportFlyer() {
+    setGeneratingFlyer(true);
+    try {
+      const latestSquares = await loadBoard();
+      if (!latestSquares) return;
+      const result = await createReportFlyer(buildReportRows(latestSquares));
+      setFlyerType("report"); setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
+    } catch { setNotice("No fue posible generar el flier de avance. Intenta nuevamente."); }
+    finally { setGeneratingFlyer(false); }
+  }
+
   async function copyFlyer() {
     if (!flyerBlob) return;
     try {
       await navigator.clipboard.write([new ClipboardItem({ "image/png": flyerBlob })]);
       setNotice("Flier copiado. Ya puedes pegarlo en WhatsApp.");
-    } catch { downloadFlyer(flyerBlob); setNotice("Tu dispositivo no permite copiar imágenes; el flier se descargó."); }
+    } catch { downloadFlyer(flyerBlob,flyerType); setNotice("Tu dispositivo no permite copiar imágenes; el flier se descargó."); }
   }
 
   async function shareFlyer() {
     if (!flyerBlob) return;
-    const file = new File([flyerBlob], "quiniela-mnf-2026.png", { type:"image/png" });
+    const filename=flyerType==="report"?"avance-quiniela-mnf-2026.png":"quiniela-mnf-2026.png";
+    const file = new File([flyerBlob], filename, { type:"image/png" });
     try {
-      if (navigator.share && navigator.canShare?.({ files:[file] })) await navigator.share({ title:"Quiniela MNF 2026", text:"¡Participa por una buena causa! Aparta tu casilla de la Quiniela MNF 2026.", files:[file] });
+      if (navigator.share && navigator.canShare?.({ files:[file] })) await navigator.share({ title:"Quiniela MNF 2026", text:flyerType==="report"?"¡Vamos por las 100! Este es nuestro avance de ventas en la Quiniela MNF 2026.":"¡Participa por una buena causa! Aparta tu casilla de la Quiniela MNF 2026.", files:[file] });
       else await copyFlyer();
     } catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) setNotice("No fue posible compartir; puedes copiar o descargar el flier."); }
   }
@@ -203,12 +208,12 @@ export default function Home() {
 
     {tab === "games" && <Games />}
     {tab === "rules" && <Rules />}
-    {tab === "reports" && <Reports rows={report} squares={squares} activity={activity} me={me!} members={members} saving={saving} onSaveMember={saveMember} onRemoveMember={removeMember} />}
+    {tab === "reports" && <Reports rows={report} squares={squares} activity={activity} me={me!} members={members} saving={saving} generatingFlyer={generatingFlyer} onGenerateFlyer={openReportFlyer} onSaveMember={saveMember} onRemoveMember={removeMember} />}
 
     <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
 
     {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} onClose={() => setSelected(null)} onSave={saveSquare} />}
-    {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">Listo para compartir</p><h3 id="flyer-title">Flier de la quiniela</h3><p>La imagen refleja el estado actual del tablero.</p></div><div className="flyer-preview"><img src={flyerUrl} alt="Flier vertical de la Quiniela MNF 2026 con tablero y reglas"/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob)}>Guardar PNG</button></div></section></div>}
+    {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">Listo para compartir</p><h3 id="flyer-title">{flyerType==="report"?"Flier de avance":"Flier de la quiniela"}</h3><p>{flyerType==="report"?"El reporte refleja el avance más reciente por socio.":"La imagen refleja el estado actual del tablero."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="report"?"Flier del avance de casillas por socio":"Flier vertical de la Quiniela MNF 2026 con tablero y reglas"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>Guardar PNG</button></div></section></div>}
     {showDigits && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowDigits(false)}><section className="modal digits-modal" role="dialog" aria-modal="true" aria-labelledby="digits-title"><button className="modal-close" onClick={() => setShowDigits(false)} aria-label="Cerrar">×</button><p className="kicker">Inicio de temporada</p><h3 id="digits-title">Números de juego</h3><p className="modal-help">Déjalos vacíos hasta el sorteo. Después, ingresa los 10 dígitos en el orden asignado.</p><label>Columnas — visitante<input value={visitorDigits} onChange={(e) => setVisitorDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 7451029863" /></label><label>Renglones — casa<input value={homeDigits} onChange={(e) => setHomeDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 0294831756" /></label><div className="modal-actions"><button className="secondary" onClick={() => {setVisitorDigits("");setHomeDigits("");}}>Limpiar</button><button className="primary" onClick={saveDigits} disabled={saving}>{saving ? "Guardando…" : "Guardar números"}</button></div></section></div>}
   </main>;
 }
@@ -236,7 +241,7 @@ function SquareModal({ square, me, members, saving, onClose, onSave }:{ square:S
   </section></div>;
 }
 
-function Reports({ rows, squares, activity, me, members, saving, onSaveMember, onRemoveMember }:{ rows:{name:string;reserved:number;paid:number;total:number}[]; squares:Square[]; activity:Activity[]; me:Member; members:Member[]; saving:boolean; onSaveMember:(member:Member,originalEmail?:string)=>Promise<boolean>; onRemoveMember:(member:Member)=>Promise<boolean> }) {
+function Reports({ rows, squares, activity, me, members, saving, generatingFlyer, onGenerateFlyer, onSaveMember, onRemoveMember }:{ rows:ReportRow[]; squares:Square[]; activity:Activity[]; me:Member; members:Member[]; saving:boolean; generatingFlyer:boolean; onGenerateFlyer:()=>void; onSaveMember:(member:Member,originalEmail?:string)=>Promise<boolean>; onRemoveMember:(member:Member)=>Promise<boolean> }) {
   const [reportView,setReportView] = useState<"summary"|"activity"|"access">("summary");
   const [draft,setDraft] = useState<Member>({email:"",name:"",role:"user",active:1});
   const [editingEmail,setEditingEmail] = useState("");
@@ -244,7 +249,7 @@ function Reports({ rows, squares, activity, me, members, saving, onSaveMember, o
   const totals = { reserved:rows.reduce((n,row)=>n+row.reserved,0), paid:rows.reduce((n,row)=>n+row.paid,0), total:rows.reduce((n,row)=>n+row.total,0) };
   return <section className="content reports-section"><div className="section-heading"><div><p className="kicker">Control y seguimiento</p><h3>Reportes</h3></div><span className="year-pill">{squares.filter((s)=>s.status!=="available").length} vendidas</span></div>
     <div className="report-switch"><button className={reportView==="summary"?"active":""} onClick={()=>setReportView("summary")}>Sumario por socio</button><button className={reportView==="activity"?"active":""} onClick={()=>setReportView("activity")}>Actividad</button>{me.role==="admin"&&<button className={reportView==="access"?"active":""} onClick={()=>setReportView("access")}>Accesos</button>}</div>
-    {reportView === "summary" && <div className="report-card"><div className="report-card-head"><div><h4>Casillas reservadas y pagadas por socio</h4><p>Las casillas se atribuyen al socio que realizó la venta.</p></div><div className="report-value"><strong>${totals.paid*100}</strong><span>cobrado</span></div></div><div className="report-table-wrap"><table className="report-table"><thead><tr><th>Socio</th><th>Reservada</th><th>Pagada</th><th>Total</th></tr></thead><tbody>{rows.map((row)=><tr key={row.name}><td>{row.name}</td><td>{row.reserved || ""}</td><td>{row.paid || ""}</td><td><strong>{row.total}</strong></td></tr>)}</tbody><tfoot><tr><td>Total general</td><td>{totals.reserved}</td><td>{totals.paid}</td><td>{totals.total}</td></tr></tfoot></table></div></div>}
+    {reportView === "summary" && <div className="report-card"><div className="report-card-head"><div><h4>Casillas reservadas y pagadas por socio</h4><p>Las casillas se atribuyen al socio que realizó la venta.</p></div><div className="report-head-actions">{me.role==="admin"&&<button className="report-flyer-button" onClick={onGenerateFlyer} disabled={generatingFlyer}>{generatingFlyer?"Generando…":"🏈 Flier de avance"}</button>}<div className="report-value"><strong>${totals.paid*100}</strong><span>cobrado</span></div></div></div><div className="report-table-wrap"><table className="report-table"><thead><tr><th>Socio</th><th>Reservada</th><th>Pagada</th><th>Total</th></tr></thead><tbody>{rows.map((row)=><tr key={row.name}><td>{row.name}</td><td>{row.reserved || ""}</td><td>{row.paid || ""}</td><td><strong>{row.total}</strong></td></tr>)}</tbody><tfoot><tr><td>Total general</td><td>{totals.reserved}</td><td>{totals.paid}</td><td>{totals.total}</td></tr></tfoot></table></div></div>}
     {reportView === "activity" && <div className="report-card"><div className="report-card-head"><div><h4>Actividad reciente</h4><p>Quién reservó, cobró o modificó cada casilla.</p></div></div><div className="activity-list">{activity.length ? activity.map((item)=><article key={item.id}><span className={`activity-icon ${item.action}`}>{activityIcon(item.action)}</span><div><strong>{item.actorName}</strong><p>{activityText(item)}</p><small>{formatDate(item.createdAt)} · {roleLabel(item.actorRole)}</small></div>{item.squareId&&<b>#{item.squareId}</b>}</article>) : <p className="empty-report">La actividad nueva aparecerá aquí.</p>}</div></div>}
     {reportView === "access" && <div className="access-management"><div className="member-form report-card"><div className="report-card-head"><div><h4>{editingEmail ? "Editar acceso" : "Agregar acceso"}</h4><p>Puedes actualizar nombre, correo, nivel y estado del socio.</p></div>{editingEmail && <button className="form-cancel" onClick={resetMemberForm}>Cancelar</button>}</div><div className="member-form-grid"><label>Nombre<input value={draft.name} onChange={(e)=>setDraft({...draft,name:e.target.value})} placeholder="Nombre del socio"/></label><label>Correo de acceso<input value={draft.email} onChange={(e)=>setDraft({...draft,email:e.target.value})} type="email" placeholder="socio@correo.com"/></label><label>Nivel<select value={draft.role} onChange={(e)=>setDraft({...draft,role:e.target.value as Role})}><option value="user">Usuario</option><option value="treasury">Tesorería</option><option value="admin">Administrador</option></select></label><label>Estado<select value={draft.active} onChange={(e)=>setDraft({...draft,active:Number(e.target.value)})}><option value={1}>Activo</option><option value={0}>Suspendido</option></select></label></div><button className="primary member-save" disabled={saving||!draft.name||!draft.email} onClick={async()=>{if(await onSaveMember(draft,editingEmail))resetMemberForm();}}>{saving?"Guardando…":editingEmail?"Guardar cambios":"Agregar acceso"}</button></div>
       <div className="report-card member-list"><div className="report-card-head"><div><h4>Personas autorizadas</h4><p>{members.filter((member)=>member.active).length} accesos activos</p></div></div>{members.map((member)=><article key={member.email}><div><strong>{member.name}</strong><span>{member.email}</span></div><span className={member.active?"member-active":"member-inactive"}>{member.active?roleLabel(member.role):"Suspendido"}</span><div className="member-actions"><button className="member-edit" onClick={()=>{setDraft({...member});setEditingEmail(member.email);}}>Editar</button><button className="member-remove" disabled={member.email===me.email||saving} onClick={async()=>{if(window.confirm(`¿Retirar el acceso de ${member.name}?`)&&await onRemoveMember(member)){if(editingEmail===member.email)resetMemberForm();}}}>Retirar</button></div></article>)}</div>
@@ -255,6 +260,33 @@ function Reports({ rows, squares, activity, me, members, saving, onSaveMember, o
 function Games(){ return <section className="content games-section"><div className="section-heading"><div><p className="kicker">Calendario oficial</p><h3>17 lunes de emoción</h3></div><span className="year-pill">2026–27</span></div><div className="games-list">{games.map((game,index)=><article className="game" key={`${game.date}-${game.visitor}`}><div className="game-number"><span>JUEGO</span><strong>{String(index+1).padStart(2,"0")}</strong></div><div className="game-date">{game.date}</div><div className="matchup"><div><small>VISITANTE</small><strong>{game.visitor}</strong></div><span>@</span><div><small>CASA</small><strong>{game.home}</strong></div></div><div className="monday">LUN<br/>7:00</div></article>)}</div></section>; }
 
 function Rules(){ const rules=[["$100 USD por casilla","El apoyo debe cubrirse totalmente antes del 14 de septiembre de 2026."],["$300 USD por juego","Puedes ganar cada vez que tu marcador resulte premiado durante los 17 juegos."],["Los números se revelan al inicio","Las casillas se eligen al azar. Los dígitos permanecen ocultos hasta iniciar la temporada."],["Cuenta el marcador final","Se consideran tiempos extras y solamente la unidad del resultado de cada equipo."]]; return <section className="content rules-section"><div className="section-heading"><div><p className="kicker">Cómo se juega</p><h3>Reglas claras, diversión grande</h3></div></div><div className="rules-grid">{rules.map(([title,body],index)=><article key={title}><span>{index+1}</span><div><h4>{title}</h4><p>{body}</p></div></article>)}</div><div className="example"><span className="example-tag">EJEMPLO</span><h4>Visitante 17 — Casa 10</h4><p>Gana la casilla donde la columna <strong>7</strong> cruza con el renglón <strong>0</strong>.</p><div className="score-example"><div><small>VISITANTE</small><strong>17</strong></div><span>→</span><div className="winning-square"><small>CASILLA</small><strong>7 × 0</strong></div><span>←</span><div><small>CASA</small><strong>10</strong></div></div></div><div className="warnings"><p>Las casillas no pagadas totalmente no juegan.</p><p>Si gana una casilla no vendida, el premio se queda en el club.</p><p>Solo participan los juegos aquí listados.</p></div></section>; }
+
+function buildReportRows(squares:Square[]):ReportRow[]{
+  const rows=new Map<string,ReportRow>();
+  squares.filter((square)=>square.status!=="available").forEach((square)=>{const name=square.reservedByName||square.contact||"Sin asignar";const row=rows.get(name)??{name,reserved:0,paid:0,total:0};if(square.status==="reserved")row.reserved+=1;else row.paid+=1;row.total+=1;rows.set(name,row);});
+  return [...rows.values()].sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name));
+}
+
+async function createReportFlyer(rows:ReportRow[]){
+  const canvas=document.createElement("canvas");canvas.width=1080;canvas.height=1920;
+  const ctx=canvas.getContext("2d");if(!ctx)throw new Error("Canvas no disponible");
+  const styles=getComputedStyle(document.body),displayFont=styles.getPropertyValue("--font-display").trim()||"Arial Black",bodyFont=styles.getPropertyValue("--font-body").trim()||"Arial";
+  const navy="#061b3e",gold="#f7b500",green="#168553",cream="#fff8e5",white="#ffffff";
+  const stadium=await loadCanvasImage("/flyer-stadium-bg.png");ctx.drawImage(stadium,0,0,1080,1920);
+  const shade=ctx.createLinearGradient(0,0,0,1920);shade.addColorStop(0,"#020a1de8");shade.addColorStop(.48,"#061b3ed1");shade.addColorStop(.82,"#031128dc");shade.addColorStop(1,"#02091899");ctx.fillStyle=shade;ctx.fillRect(0,0,1080,1920);ctx.fillStyle=gold;ctx.fillRect(0,0,1080,14);ctx.fillRect(0,1906,1080,14);
+  const logo=await loadCanvasImage("/logo-crjc-white-gold.png"),logoW=430,logoH=logoW*(logo.height/logo.width);ctx.drawImage(logo,(1080-logoW)/2,30,logoW,logoH);
+  ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 29px ${displayFont}`;ctx.fillText("AVANCE DE VENTAS · QUINIELA MNF 2026",540,286);ctx.fillStyle=white;ctx.font=`400 70px ${displayFont}`;ctx.fillText("¡VAMOS POR LAS 100!",540,370);ctx.fillStyle=cream;ctx.font=`600 27px ${bodyFont}`;ctx.fillText("Cada casilla vendida nos acerca a la meta y multiplica nuestra ayuda.",540,416);
+  const totals={reserved:rows.reduce((n,row)=>n+row.reserved,0),paid:rows.reduce((n,row)=>n+row.paid,0),total:rows.reduce((n,row)=>n+row.total,0)};
+  roundedBox(ctx,72,458,936,112,20,"#071a3be8",gold,3);const metrics=[[String(totals.reserved),"RESERVADAS",gold],[String(totals.paid),"PAGADAS",green],[String(totals.total),"COLOCADAS",white]];metrics.forEach(([value,label,color],index)=>{const x=228+index*312;ctx.fillStyle=color;ctx.font=`400 44px ${displayFont}`;ctx.fillText(value,x,510);ctx.fillStyle="#b9c7da";ctx.font=`800 17px ${bodyFont}`;ctx.fillText(label,x,544);});
+  roundedBox(ctx,92,596,896,28,14,"#ffffff24",null,0);if(totals.total){roundedBox(ctx,92,596,Math.max(28,896*Math.min(totals.total/100,1)),28,14,gold,null,0);}ctx.fillStyle=white;ctx.font=`800 17px ${bodyFont}`;ctx.fillText(`${totals.total}% DE LA META`,540,657);
+  const visibleRows=rows.slice(0,26),rowHeight=Math.max(34,Math.min(56,Math.floor(820/Math.max(visibleRows.length,1)))),tableY=692,tableH=58+visibleRows.length*rowHeight+58;
+  roundedBox(ctx,60,tableY-18,960,tableH+36,24,"#03112bec",gold,3);ctx.fillStyle="#0d2e61";ctx.fillRect(82,tableY,916,58);ctx.textBaseline="middle";ctx.fillStyle=gold;ctx.font=`400 18px ${displayFont}`;ctx.textAlign="left";ctx.fillText("SOCIO",108,tableY+29);[["RES.",702],["PAG.",838],["TOTAL",954]].forEach(([label,x])=>{ctx.textAlign="center";ctx.fillText(String(label),Number(x),tableY+29);});
+  if(!visibleRows.length){ctx.fillStyle=white;ctx.textAlign="center";ctx.font=`600 25px ${bodyFont}`;ctx.fillText("El avance aparecerá al registrar las primeras ventas.",540,tableY+120);}
+  visibleRows.forEach((row,index)=>{const y=tableY+58+index*rowHeight;if(index%2===0){ctx.fillStyle="#ffffff0b";ctx.fillRect(82,y,916,rowHeight);}ctx.textBaseline="middle";ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`700 ${Math.max(16,Math.min(22,rowHeight*.4))}px ${bodyFont}`;ctx.fillText(fitCanvasText(ctx,row.name,535),108,y+rowHeight/2);ctx.font=`400 ${Math.max(18,Math.min(24,rowHeight*.45))}px ${displayFont}`;[[row.reserved,702,gold],[row.paid,838,green],[row.total,954,white]].forEach(([value,x,color])=>{ctx.fillStyle=String(color);ctx.textAlign="center";ctx.fillText(String(value||"—"),Number(x),y+rowHeight/2);});});
+  const totalY=tableY+58+visibleRows.length*rowHeight;ctx.fillStyle=gold;ctx.fillRect(82,totalY,916,58);ctx.fillStyle=navy;ctx.font=`400 21px ${displayFont}`;ctx.textAlign="left";ctx.fillText("TOTAL DEL EQUIPO",108,totalY+29);[[totals.reserved,702],[totals.paid,838],[totals.total,954]].forEach(([value,x])=>{ctx.textAlign="center";ctx.fillText(String(value),Number(x),totalY+29);});ctx.textBaseline="alphabetic";
+  const messageY=Math.max(1580,totalY+105);ctx.fillStyle=white;ctx.textAlign="center";ctx.font=`400 34px ${displayFont}`;ctx.fillText("¡EL SIGUIENTE AVANCE LO CONSTRUIMOS JUNTOS!",540,messageY);ctx.fillStyle="#c2cee0";ctx.font=`600 22px ${bodyFont}`;ctx.fillText("Comparte la causa, invita a participar y coloca tu próxima casilla.",540,messageY+42);if(rows.length>visibleRows.length){ctx.fillStyle=gold;ctx.font=`700 16px ${bodyFont}`;ctx.fillText(`Consulta el reporte completo en la app · ${rows.length-visibleRows.length} socios adicionales`,540,messageY+72);}roundedBox(ctx,75,1847,930,53,15,gold,null,0);ctx.fillStyle=navy;ctx.font=`400 25px ${displayFont}`;ctx.fillText("100 CASILLAS · 17 JUEGOS · UNA GRAN CAUSA",540,1882);
+  const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));return{blob,url:canvas.toDataURL("image/png")};
+}
 
 async function createFlyer(squares: Square[]) {
   const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1920;
@@ -296,8 +328,9 @@ async function createFlyer(squares: Square[]) {
 
 function roundedBox(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number,fill:string,stroke:string|null,width:number){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke();}}
 function drawWrappedText(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,maxWidth:number,lineHeight:number){const words=text.split(" ");let line="",lineY=y;for(const word of words){const test=`${line}${word} `;if(line&&ctx.measureText(test).width>maxWidth){ctx.fillText(line.trim(),x,lineY);line=`${word} `;lineY+=lineHeight;}else line=test;}if(line)ctx.fillText(line.trim(),x,lineY);}
+function fitCanvasText(ctx:CanvasRenderingContext2D,text:string,maxWidth:number){if(ctx.measureText(text).width<=maxWidth)return text;let value=text;while(value.length>1&&ctx.measureText(`${value}…`).width>maxWidth)value=value.slice(0,-1);return `${value}…`;}
 function loadCanvasImage(src:string){return new Promise<HTMLImageElement>((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error("No se pudo cargar el logo"));image.src=src;});}
-function downloadFlyer(blob:Blob){const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="quiniela-mnf-2026.png";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function downloadFlyer(blob:Blob,type:"board"|"report"="board"){const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=type==="report"?"avance-quiniela-mnf-2026.png":"quiniela-mnf-2026.png";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 function isOwned(square:Square,me:Member){ return Boolean(square.reservedByEmail) && square.reservedByEmail.toLowerCase()===me.email.toLowerCase(); }
 function labelFor(status:Status){ return status==="available"?"Disponible":status==="reserved"?"Reservada":"Pagada"; }
