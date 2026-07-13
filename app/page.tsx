@@ -111,7 +111,14 @@ export default function Home() {
       <div className="account-chip"><div><strong>{me?.name}</strong><span>{roleLabel(me?.role ?? "user")}</span></div><a href="/signout-with-chatgpt?return_to=%2F" aria-label="Cerrar sesión">Salir</a></div>
     </header>
 
-    <section className="hero"><div><span className="eyebrow">Lotería anual pro ayuda</span><h2>Un tablero. <em>17 oportunidades</em> de ganar.</h2><p>Cada casilla apoya proyectos de salud, subvenciones humanitarias y el combate contra la polio.</p></div><div className="hero-stat"><strong>$300</strong><span>USD por juego</span></div></section>
+    <section className="hero sports-hero">
+      <div className="yard-markers" aria-hidden="true"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span></div>
+      <div className="hero-copy"><span className="eyebrow">Lotería anual pro ayuda · Temporada 2026</span><h2>Un tablero. <em>17 oportunidades</em> de ganar.</h2><p>Cada casilla apoya proyectos de salud, subvenciones humanitarias y el combate contra la polio.</p></div>
+      <div className="hero-sports" aria-hidden="true"><div className="football"><span className="laces"><i/><i/><i/><i/></span></div><div className="scoreboard"><span>PREMIO POR JUEGO</span><strong>$300</strong><small>USD · MARCADOR FINAL</small></div></div>
+      <div className="goalpost" aria-hidden="true"><i/><b/><span/></div>
+    </section>
+
+    <div className="sports-strip" aria-label="Datos principales de la quiniela"><div><span className="mini-football" aria-hidden="true"/><strong>17</strong><small>Juegos MNF</small></div><div><span className="yard-icon" aria-hidden="true">50</span><strong>100</strong><small>Casillas</small></div><div><span className="trophy-icon" aria-hidden="true">★</span><strong>$100</strong><small>Por casilla</small></div><div><span className="heart-icon" aria-hidden="true">♥</span><strong>1</strong><small>Gran causa</small></div></div>
 
     <nav className="tabs" aria-label="Secciones">
       <button className={tab === "board" ? "active" : ""} onClick={() => setTab("board")}><span>▦</span> Tablero</button>
@@ -123,7 +130,7 @@ export default function Home() {
     {notice && <button className="notice" onClick={() => setNotice("")} aria-label="Cerrar aviso">{notice}<span>×</span></button>}
 
     {tab === "board" && <section className="content board-section">
-      <div className="section-heading"><div><p className="kicker">100 casillas</p><h3>Elige tu número de la suerte</h3></div>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div>
+      <div className="section-heading"><div><p className="kicker">Tablero oficial · 100 casillas</p><h3>Elige tu número de la suerte</h3></div>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div>
       <div className="summary-grid">
         <button className={filter === "available" ? "summary active" : "summary"} onClick={() => setFilter(filter === "available" ? "all" : "available")}><span className="dot available"/><div><strong>{counts.available}</strong><small>Disponibles</small></div></button>
         <button className={filter === "reserved" ? "summary active" : "summary"} onClick={() => setFilter(filter === "reserved" ? "all" : "reserved")}><span className="dot reserved"/><div><strong>{counts.reserved}</strong><small>Reservadas</small></div></button>
