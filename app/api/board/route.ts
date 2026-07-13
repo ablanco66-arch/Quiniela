@@ -102,14 +102,45 @@ export async function PUT(request: Request) {
     if (payload.action === "member") {
       if (actor.role !== "admin") return forbidden();
       const email = String(payload.email ?? "").trim().toLowerCase();
+      const originalEmail = String(payload.originalEmail ?? "").trim().toLowerCase();
       const name = String(payload.name ?? "").trim();
       const role = String(payload.role ?? "") as Role;
       const active = payload.active === false ? 0 : 1;
       if (!emailPattern(email) || !name || !["admin", "user", "treasury"].includes(role)) return Response.json({ error: "Datos de usuario inválidos" }, { status: 400 });
-      if (email === actor.email && (role !== "admin" || !active)) return Response.json({ error: "No puedes retirar tu propio acceso de administrador" }, { status: 400 });
+      if ((originalEmail || email) === actor.email && (email !== actor.email || role !== "admin" || !active)) return Response.json({ error: "No puedes cambiar tu correo, rol o acceso de administrador" }, { status: 400 });
+      if (originalEmail) {
+        const existing = await env.DB.prepare("SELECT email, name FROM members WHERE email = ?").bind(originalEmail).first<{email:string;name:string}>();
+        if (!existing) return Response.json({ error: "El usuario que deseas editar ya no existe" }, { status: 404 });
+        const duplicate = email !== originalEmail ? await env.DB.prepare("SELECT email FROM members WHERE email = ?").bind(email).first() : null;
+        if (duplicate) return Response.json({ error: "Ese correo ya pertenece a otro usuario" }, { status: 400 });
+        await env.DB.batch([
+          env.DB.prepare("UPDATE members SET email = ?, name = ?, role = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?").bind(email, name, role, active, originalEmail),
+          env.DB.prepare("UPDATE squares SET reserved_by_email = ?, reserved_by_name = ? WHERE reserved_by_email = ? OR (reserved_by_email = '' AND reserved_by_name = ?)").bind(email, name, originalEmail, existing.name),
+          env.DB.prepare("UPDATE squares SET paid_by_email = ?, paid_by_name = ? WHERE paid_by_email = ?").bind(email, name, originalEmail),
+          activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${active ? "activo" : "suspendido"}`),
+        ]);
+      } else {
+        const duplicate = await env.DB.prepare("SELECT email FROM members WHERE email = ?").bind(email).first();
+        if (duplicate) return Response.json({ error: "Ese correo ya está registrado; usa Editar" }, { status: 400 });
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO members (email, name, role, active) VALUES (?, ?, ?, ?)").bind(email, name, role, active),
+          activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${active ? "activo" : "suspendido"}`),
+        ]);
+      }
+      const members = await env.DB.prepare("SELECT email, name, role, active FROM members ORDER BY name, email").all();
+      return Response.json({ members: members.results });
+    }
+
+    if (payload.action === "member_remove") {
+      if (actor.role !== "admin") return forbidden();
+      const email = String(payload.email ?? "").trim().toLowerCase();
+      if (!emailPattern(email)) return Response.json({ error: "Usuario inválido" }, { status: 400 });
+      if (email === actor.email) return Response.json({ error: "No puedes retirar tu propio acceso de administrador" }, { status: 400 });
+      const member = await env.DB.prepare("SELECT name FROM members WHERE email = ?").bind(email).first<{name:string}>();
+      if (!member) return Response.json({ error: "El usuario ya no existe" }, { status: 404 });
       await env.DB.batch([
-        env.DB.prepare(`INSERT INTO members (email, name, role, active) VALUES (?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET name = excluded.name, role = excluded.role, active = excluded.active, updated_at = CURRENT_TIMESTAMP`).bind(email, name, role, active),
-        activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${active ? "activo" : "inactivo"}`),
+        env.DB.prepare("DELETE FROM members WHERE email = ?").bind(email),
+        activity(actor, null, "member_removed", "", "", member.name),
       ]);
       const members = await env.DB.prepare("SELECT email, name, role, active FROM members ORDER BY name, email").all();
       return Response.json({ members: members.results });
@@ -148,8 +179,12 @@ export async function PUT(request: Request) {
         reservedAt = new Date().toISOString();
       }
       if (actor.role === "admin") {
-        reservedByEmail = String(payload.reservedByEmail ?? reservedByEmail).trim().toLowerCase();
-        reservedByName = String(payload.reservedByName ?? (reservedByName || actor.name)).trim();
+        const requestedSellerName = String(payload.reservedByName ?? reservedByName).trim();
+        if (!requestedSellerName) return Response.json({ error: "Selecciona al socio que vendió la casilla" }, { status: 400 });
+        const registeredSeller = await env.DB.prepare("SELECT email, name FROM members WHERE name = ? AND active = 1").bind(requestedSellerName).first<{email:string;name:string}>();
+        const unchangedLegacySeller = current.status !== "available" && requestedSellerName === String(current.reservedByName ?? "") && !registeredSeller;
+        if (!registeredSeller && !unchangedLegacySeller) return Response.json({ error: "Selecciona un socio activo registrado" }, { status: 400 });
+        if (registeredSeller) { reservedByEmail = registeredSeller.email; reservedByName = registeredSeller.name; }
       }
       if (requestedStatus === "paid" && current.status !== "paid") {
         paidByEmail = actor.email;
