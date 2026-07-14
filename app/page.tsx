@@ -96,14 +96,26 @@ export default function Home() {
 
   async function saveMember(member: Member, originalEmail = "") {
     setSaving(true);
-    try { const data = await put({ action:"member", ...member, originalEmail, active:Boolean(member.active) }); setMembers(data.members); setNotice(`Acceso de ${member.name} actualizado`); return true; }
+    try {
+      const data = await put({ action:"member", ...member, originalEmail, active:Boolean(member.active) });
+      setMembers(data.members);
+      await loadBoard();
+      setNotice(`Acceso de ${member.name} actualizado`);
+      return true;
+    }
     catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo actualizar el acceso."); return false; }
     finally { setSaving(false); }
   }
 
   async function removeMember(member: Member) {
     setSaving(true);
-    try { const data = await put({ action:"member_remove", email:member.email }); setMembers(data.members); setNotice(`Acceso de ${member.name} retirado`); return true; }
+    try {
+      const data = await put({ action:"member_remove", email:member.email });
+      setMembers(data.members);
+      await loadBoard();
+      setNotice(`Acceso de ${member.name} retirado`);
+      return true;
+    }
     catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo retirar el acceso."); return false; }
     finally { setSaving(false); }
   }
