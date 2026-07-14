@@ -277,10 +277,10 @@ function AccessScreen({ state, email }:{ state:"loading"|"signin"|"denied"|"pass
 
 function SquareModal({ square, me, members, saving, onClose, onSave }:{ square:Square; me:Member; members:Member[]; saving:boolean; onClose:()=>void; onSave:(square:Square)=>void }) {
   const [draft,setDraft] = useState(square);
-  const owns = isOwned(square,me); const admin = me.role === "admin"; const treasuryOther = me.role === "treasury" && square.status === "reserved" && !owns;
+  const owns = isOwned(square,me); const admin = me.role === "admin"; const treasuryPayment = me.role === "treasury" && square.status === "reserved"; const treasuryOther = treasuryPayment && !owns;
   const editableDetails = admin || owns || square.status === "available";
   const statuses = (["available","reserved","paid"] as Status[]);
-  const allowed = (status:Status) => admin || (square.status === "available" && status === "reserved") || (owns && square.status === "reserved" && (status === "reserved" || status === "paid")) || (owns && square.status === "paid" && status === "paid") || (treasuryOther && status === "paid");
+  const allowed = (status:Status) => admin || (square.status === "available" && status === "reserved") || (owns && square.status === "reserved" && (status === "reserved" || (me.role === "treasury" && status === "paid"))) || (owns && square.status === "paid" && status === "paid") || (treasuryOther && status === "paid");
   const canSave = admin || allowed(draft.status);
   function update(field:keyof Square,value:string){ setDraft((current) => ({...current,[field]:value})); }
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="square-title"><button className="modal-close" onClick={onClose} aria-label="Cerrar">×</button><div className={`modal-number ${draft.status}`}>{draft.id}</div><div><p className="kicker">Detalle de casilla</p><h3 id="square-title">Casilla #{draft.id}</h3></div>
@@ -290,7 +290,7 @@ function SquareModal({ square, me, members, saving, onClose, onSave }:{ square:S
       {draft.status === "paid" && <div className="payment-proof"><span>Pago confirmado por</span><strong>{draft.paidByName || "Se registrará al guardar"}</strong></div>}
     </>}
     {!canSave && <p className="locked-message">Esta casilla fue vendida por otro socio. Puedes consultar sus datos, pero no modificarlos.</p>}
-    <div className="modal-actions"><button className="secondary" onClick={onClose}>Cerrar</button>{canSave && <button className="primary" disabled={saving || (draft.status !== "available" && (!draft.participant.trim() || (admin && !draft.reservedByName.trim())))} onClick={() => onSave(draft)}>{saving ? "Guardando…" : treasuryOther ? "Confirmar pago" : "Guardar cambios"}</button>}</div>
+    <div className="modal-actions"><button className="secondary" onClick={onClose}>Cerrar</button>{canSave && <button className="primary" disabled={saving || (draft.status !== "available" && (!draft.participant.trim() || (admin && !draft.reservedByName.trim())))} onClick={() => onSave(draft)}>{saving ? "Guardando…" : treasuryPayment && draft.status === "paid" ? "Confirmar pago" : "Guardar cambios"}</button>}</div>
   </section></div>;
 }
 
@@ -396,7 +396,7 @@ function isOwned(square:Square,me:Member){ return Boolean(square.reservedByEmail
 function labelFor(status:Status){ return status==="available"?"Disponible":status==="reserved"?"Reservada":"Pagada"; }
 function roleLabel(role:Role){ return role==="admin"?"Administrador":role==="treasury"?"Tesorería":"Usuario"; }
 function roleIcon(role:Role){ return role==="admin"?"A":role==="treasury"?"T":"U"; }
-function roleHelp(role:Role){ return role==="admin"?"Puedes modificar cualquier dato, administrar accesos y configurar los números.":role==="treasury"?"Puedes reservar casillas y confirmar el pago de cualquier reservación.":"Puedes reservar casillas y confirmar el pago únicamente de las que tú vendiste."; }
+function roleHelp(role:Role){ return role==="admin"?"Puedes modificar cualquier dato, administrar accesos y configurar los números.":role==="treasury"?"Puedes reservar casillas y confirmar el pago de cualquier reservación.":"Puedes reservar casillas disponibles y actualizar los datos de las que tú vendiste. Tesorería confirmará los pagos."; }
 function initials(name:string){ return name.split(/\s+/).filter(Boolean).slice(0,2).map((part)=>part[0]).join("").toUpperCase(); }
 function cleanDigits(value:string){ return value.replace(/\D/g,"").slice(0,10); }
 function isDigitSet(value:string){ return value.length===10&&new Set(value).size===10&&[...value].every((digit)=>"0123456789".includes(digit)); }

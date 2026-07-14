@@ -199,6 +199,7 @@ export async function PUT(request: Request) {
     if (!current) return Response.json({ error: "Casilla no encontrada" }, { status: 404 });
     const owns = String(current.reservedByEmail ?? "").toLowerCase() === actor.email;
     const treasuryPayment = actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid" && !owns;
+    if (actor.role === "user" && current.status === "reserved" && requestedStatus === "paid") return forbidden("Solo Tesorería y Administración pueden confirmar pagos");
     if (!canChangeSquare(actor.role, String(current.status), requestedStatus, owns)) return forbidden("No puedes modificar una casilla vendida por otro socio");
 
     let participant = String(payload.participant ?? "").trim();
@@ -257,7 +258,7 @@ function activity(actor: Actor, squareId: number | null, actionName: string, pre
 function canChangeSquare(role: Role, current: string, requested: string, owns: boolean) {
   if (role === "admin") return true;
   if (current === "available") return requested === "reserved";
-  if (owns && current === "reserved") return requested === "reserved" || requested === "paid";
+  if (owns && current === "reserved") return requested === "reserved" || (role === "treasury" && requested === "paid");
   if (owns && current === "paid") return requested === "paid";
   return role === "treasury" && current === "reserved" && requested === "paid";
 }
