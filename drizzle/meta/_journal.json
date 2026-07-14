@@ -22,6 +22,13 @@
       "when": 1784021905202,
       "tag": "0002_polite_proudstar",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784023754343,
+      "tag": "0003_yellow_forge",
+      "breakpoints": true
     }
   ]
 }

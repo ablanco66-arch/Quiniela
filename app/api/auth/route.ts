@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
-import { createSession, deleteSession, ensureLocalAuthSchema, hashPassword, normalizeUsername, validUsername, verifyPassword } from "../../lib/local-auth";
+import { createSession, deleteSession, ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, validUsername, verifyPassword } from "../../lib/local-auth";
 
 type LoginMember = {
   email: string; name: string; role: string; active: number; username: string;
   passwordSalt: string; passwordHash: string; approvalStatus: string;
-  failedAttempts: number; lockedUntil: string;
+  failedAttempts: number; lockedUntil: string; mustChangePassword: number;
 };
 
 export async function POST(request: Request) {
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     const action = String(payload.action ?? "");
     if (action === "register") return register(payload);
     if (action === "login") return login(payload);
+    if (action === "change_password") return changePassword(request, payload);
     if (action === "logout") {
       const cookie = await deleteSession(request);
       return json({ ok: true }, 200, cookie);
@@ -47,6 +48,7 @@ async function login(payload: Record<string, unknown>) {
   const member = await env.DB.prepare(`SELECT email, name, role, active, username,
     password_salt AS passwordSalt, password_hash AS passwordHash,
     approval_status AS approvalStatus, failed_attempts AS failedAttempts, locked_until AS lockedUntil
+    , must_change_password AS mustChangePassword
     FROM members WHERE username = ?`).bind(username).first<LoginMember>();
   if (!member?.passwordHash || !member.passwordSalt) return json({ error: "Usuario o contraseña incorrectos" }, 401);
   const now = Date.now();
@@ -62,7 +64,18 @@ async function login(payload: Record<string, unknown>) {
   if (!member.active || member.approvalStatus !== "approved") return json({ error: "Tu acceso está suspendido. Comunícate con un administrador." }, 403);
   await env.DB.prepare("UPDATE members SET failed_attempts = 0, locked_until = '', updated_at = CURRENT_TIMESTAMP WHERE email = ?").bind(member.email).run();
   const session = await createSession(member.email);
-  return json({ ok: true, name: member.name, role: member.role }, 200, session.cookie);
+  return json({ ok: true, name: member.name, role: member.role, mustChangePassword:Boolean(member.mustChangePassword) }, 200, session.cookie);
+}
+
+async function changePassword(request: Request, payload: Record<string, unknown>) {
+  const actor = await getLocalActor(request);
+  if (!actor) return json({ error: "Tu sesión venció. Inicia nuevamente con la contraseña temporal." }, 401);
+  const password = String(payload.password ?? "");
+  if (password.length < 8 || password.length > 128) return json({ error: "La nueva contraseña debe tener al menos 8 caracteres" }, 400);
+  const credentials = await hashPassword(password);
+  await env.DB.prepare("UPDATE members SET password_salt = ?, password_hash = ?, must_change_password = 0, failed_attempts = 0, locked_until = '', updated_at = CURRENT_TIMESTAMP WHERE email = ?")
+    .bind(credentials.salt, credentials.hash, actor.email).run();
+  return json({ ok: true, message: "Contraseña actualizada" });
 }
 
 function json(body: Record<string, unknown>, status = 200, cookie = "") {

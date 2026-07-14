@@ -1,0 +1,1 @@
+ALTER TABLE `members` ADD `must_change_password` integer DEFAULT 0 NOT NULL;

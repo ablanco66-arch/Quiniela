@@ -34,6 +34,7 @@ export const members = sqliteTable("members", {
   approvalStatus: text("approval_status").notNull().default("approved"),
   failedAttempts: integer("failed_attempts").notNull().default(0),
   lockedUntil: text("locked_until").notNull().default(""),
+  mustChangePassword: integer("must_change_password").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

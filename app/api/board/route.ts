@@ -1,12 +1,13 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { ensureLocalAuthSchema, getLocalActor } from "../../lib/local-auth";
+import { ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, validUsername } from "../../lib/local-auth";
 
 type Role = "admin" | "user" | "treasury";
 type SeedSquare = { id: number; status: "reserved" | "paid"; participant: string; contact: string };
 type Actor = { email: string; name: string; role: Role; authProvider: "local" | "chatgpt" };
 const INITIAL_ADMIN_EMAIL = "ablanco66@gmail.com";
 const INITIAL_ADMIN_NAME = "Andrés Blanco";
+const MEMBER_LIST_SQL = "SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus, must_change_password AS mustChangePassword FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email";
 
 const occupied: SeedSquare[] = [
   [4,"reserved","Cabiria Flores","Cabi Flores"],[5,"reserved","Eduardo Cinco","Yamel Guillén"],[6,"reserved","Jaime Chávez","Mario Blanco"],[7,"reserved","Jay Marcel","Gabriel Barbosa"],[9,"reserved","María Xóchitl Sánchez","María Xóchitl Sánchez"],[11,"reserved","Rubén de Santiago","Yamel Guillén"],[13,"reserved","Omar Apodaca","Yamel Guillén"],[16,"reserved","Daniel de la Rosa","Angie de la Rosa"],[17,"reserved","Rosa Ávila","Angie de la Rosa"],[18,"paid","José Calderón","Darío Sánchez"],[21,"reserved","Roberto Martínez","Angie de la Rosa"],[22,"paid","Rosa Ma. Espinoza","Mario Blanco"],[24,"reserved","Manolo Papadakis","Mario Blanco"],[25,"reserved","Efrén Páramo","Myrna Sandoval"],[26,"reserved","Irma de Alvarado","Mario Blanco · CR Cd. Juárez"],[29,"reserved","Juan Carlos Márquez","Darío Sánchez"],[30,"reserved","Roberto de la Rosa","Angie de la Rosa"],[33,"reserved","Felipe Meza","Mario Blanco · CRJ Ejecutivo"],[34,"reserved","Javo Murguía","Mario Blanco"],[35,"reserved","Javier Guillén","Yamel Guillén"],[37,"reserved","Edith Manríquez","Edith Manríquez"],[40,"paid","Alejandro Arrieta","Darío Sánchez"],[43,"reserved","Juan Carlos Olivares","JC Olivares"],[44,"reserved","Nidia de la Rosa","Angie de la Rosa"],[45,"reserved","Jesús Cansino","Yamel Guillén"],[47,"reserved","Charly Coutiño","Myrna Sandoval"],[48,"paid","Rosa Ma. Espinoza","Glafira Manríquez"],[50,"reserved","Marty Class","Edith Manríquez"],[54,"reserved","Enrique Luján","Mario Blanco"],[55,"reserved","Richy Cabada","Angie de la Rosa"],[57,"reserved","Cindy Holguín","Darío Sánchez"],[58,"reserved","Daniel Martínez","Mario Blanco · CRJ Siglo XXI"],[64,"reserved","Guillermo Huerta","Glafira Manríquez · CRJ S. XXI"],[65,"reserved","Laura de la Rosa","Angie de la Rosa"],[66,"reserved","Felipe Meza","Mario Blanco · CRJ Ejecutivo"],[67,"reserved","Jay Marcel","Gabriel Barbosa"],[72,"reserved","Jimmy Holguín","Mario Blanco · CR Cd. Juárez"],[76,"paid","Andrés Blanco","Glafira Manríquez"],[85,"paid","Teófilo Ugalde","Mario Blanco"],[90,"reserved","David Jiménez","Angie de la Rosa"],[96,"paid","Adriana Galván","Edith Manríquez"],[98,"paid","Andrés Blanco","Mario Blanco"],[99,"reserved","Andrés Iglesias","Mario Blanco"],[100,"reserved","Betzabel Tobías","Betzabel Tobías"],
@@ -58,6 +59,7 @@ async function ensureDatabase() {
 
 async function getActor(request: Request): Promise<Actor | Response> {
   const localActor = await getLocalActor(request);
+  if (localActor?.mustChangePassword) return Response.json({ error:"Debes cambiar la contraseña temporal antes de continuar", code:"PASSWORD_CHANGE_REQUIRED" }, { status:428 });
   if (localActor) return localActor;
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Inicia sesión para continuar", code: "AUTH_REQUIRED" }, { status: 401 });
@@ -75,7 +77,7 @@ export async function GET(request: Request) {
     const [squareResult, settings, memberResult, activityResult] = await Promise.all([
       env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares ORDER BY id`).all(),
       env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first(),
-      actor.role === "admin" ? env.DB.prepare("SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email").all() : Promise.resolve({ results: [] }),
+      actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
       env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY id DESC LIMIT 60").all(),
     ]);
     return Response.json({ squares: squareResult.results, settings, me: actor, members: memberResult.results, activity: activityResult.results });
@@ -102,6 +104,27 @@ export async function PUT(request: Request) {
       return Response.json({ settings: { visitorDigits, homeDigits } });
     }
 
+    if (payload.action === "member_create_local") {
+      if (actor.role !== "admin") return forbidden();
+      const name = String(payload.name ?? "").trim();
+      const username = normalizeUsername(String(payload.username ?? ""));
+      const temporaryPassword = String(payload.tempPassword ?? "");
+      const role = String(payload.role ?? "user") as Role;
+      const active = payload.active === false ? 0 : 1;
+      if (name.length < 3 || name.length > 80 || !validUsername(username) || temporaryPassword.length < 8 || temporaryPassword.length > 128 || !["admin","user","treasury"].includes(role)) return Response.json({ error:"Revisa el nombre, usuario, rol y contraseña temporal" }, { status:400 });
+      const duplicate = await env.DB.prepare("SELECT email FROM members WHERE username = ?").bind(username).first();
+      if (duplicate) return Response.json({ error:"Ese nombre de usuario ya está registrado" }, { status:409 });
+      const credentials = await hashPassword(temporaryPassword);
+      const email = `local:${crypto.randomUUID()}`;
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO members (email, name, role, active, username, password_salt, password_hash, approval_status, must_change_password)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`).bind(email, name, role, active, username, credentials.salt, credentials.hash, active ? "approved" : "suspended"),
+        activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · cuenta propia creada`),
+      ]);
+      const members = await env.DB.prepare(MEMBER_LIST_SQL).all();
+      return Response.json({ members:members.results, created:true });
+    }
+
     if (payload.action === "member") {
       if (actor.role !== "admin") return forbidden();
       const email = String(payload.email ?? "").trim().toLowerCase();
@@ -109,9 +132,11 @@ export async function PUT(request: Request) {
       const name = String(payload.name ?? "").trim();
       const role = String(payload.role ?? "") as Role;
       const active = payload.active === false ? 0 : 1;
+      const temporaryPassword = String(payload.tempPassword ?? "");
       const requestedApproval = String(payload.approvalStatus ?? "");
       const approvalStatus = ["pending", "approved", "suspended"].includes(requestedApproval) ? requestedApproval : active ? "approved" : "suspended";
       if (!(emailPattern(email) || isLocalIdentity(email)) || !name || !["admin", "user", "treasury"].includes(role)) return Response.json({ error: "Datos de usuario inválidos" }, { status: 400 });
+      if (temporaryPassword && (temporaryPassword.length < 8 || temporaryPassword.length > 128)) return Response.json({ error:"La contraseña temporal debe tener al menos 8 caracteres" }, { status:400 });
       if ((originalEmail || email) === actor.email && (email !== actor.email || role !== "admin" || !active)) return Response.json({ error: "No puedes cambiar tu correo, rol o acceso de administrador" }, { status: 400 });
       if (originalEmail) {
         const existing = await env.DB.prepare("SELECT email, name, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members WHERE email = ?").bind(originalEmail).first<{email:string;name:string;username:string;approvalStatus:string}>();
@@ -130,6 +155,11 @@ export async function PUT(request: Request) {
           statements.push(env.DB.prepare("UPDATE squares SET reserved_by_email = ?, reserved_by_name = ? WHERE reserved_by_name = ?").bind(email, name, existing.name));
           statements.push(env.DB.prepare("UPDATE squares SET paid_by_email = ?, paid_by_name = ? WHERE paid_by_name = ?").bind(email, name, existing.name));
         }
+        if (temporaryPassword) {
+          const credentials = await hashPassword(temporaryPassword);
+          statements.push(env.DB.prepare("UPDATE members SET password_salt = ?, password_hash = ?, must_change_password = 1, failed_attempts = 0, locked_until = '', updated_at = CURRENT_TIMESTAMP WHERE email = ?").bind(credentials.salt, credentials.hash, originalEmail));
+          statements.push(env.DB.prepare("DELETE FROM sessions WHERE member_email = ?").bind(originalEmail));
+        }
         if (!active) statements.push(env.DB.prepare("DELETE FROM sessions WHERE member_email = ?").bind(originalEmail));
         await env.DB.batch(statements);
       } else {
@@ -141,7 +171,7 @@ export async function PUT(request: Request) {
           activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${active ? "activo" : "suspendido"}`),
         ]);
       }
-      const members = await env.DB.prepare("SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email").all();
+      const members = await env.DB.prepare(MEMBER_LIST_SQL).all();
       return Response.json({ members: members.results });
     }
 
@@ -157,7 +187,7 @@ export async function PUT(request: Request) {
         env.DB.prepare("DELETE FROM members WHERE email = ?").bind(email),
         activity(actor, null, "member_removed", "", "", member.name),
       ]);
-      const members = await env.DB.prepare("SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email").all();
+      const members = await env.DB.prepare(MEMBER_LIST_SQL).all();
       return Response.json({ members: members.results });
     }
 

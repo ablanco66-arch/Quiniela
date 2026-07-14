@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 
 export type LocalRole = "admin" | "user" | "treasury";
-export type LocalActor = { email: string; name: string; role: LocalRole; authProvider: "local" };
+export type LocalActor = { email: string; name: string; role: LocalRole; authProvider: "local"; mustChangePassword: boolean };
 
 const SESSION_COOKIE = "quiniela_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
@@ -20,6 +20,7 @@ export async function ensureLocalAuthSchema() {
     approval_status TEXT NOT NULL DEFAULT 'approved',
     failed_attempts INTEGER NOT NULL DEFAULT 0,
     locked_until TEXT NOT NULL DEFAULT '',
+    must_change_password INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`).run();
@@ -33,6 +34,7 @@ export async function ensureLocalAuthSchema() {
     ["approval_status", "ALTER TABLE members ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'approved'"],
     ["failed_attempts", "ALTER TABLE members ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0"],
     ["locked_until", "ALTER TABLE members ADD COLUMN locked_until TEXT NOT NULL DEFAULT ''"],
+    ["must_change_password", "ALTER TABLE members ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"],
   ].filter(([name]) => !columns.has(name));
   if (additions.length) await db.batch(additions.map(([, sql]) => db.prepare(sql)));
 
@@ -55,12 +57,12 @@ export async function getLocalActor(request: Request): Promise<LocalActor | null
   if (!token) return null;
   const tokenHash = await sha256(token);
   const now = new Date().toISOString();
-  const member = await env.DB.prepare(`SELECT m.email, m.name, m.role
+  const member = await env.DB.prepare(`SELECT m.email, m.name, m.role, m.must_change_password AS mustChangePassword
     FROM sessions s JOIN members m ON m.email = s.member_email
     WHERE s.token_hash = ? AND s.expires_at > ? AND m.active = 1 AND m.approval_status = 'approved'`)
-    .bind(tokenHash, now).first<{ email: string; name: string; role: LocalRole }>();
+    .bind(tokenHash, now).first<{ email: string; name: string; role: LocalRole; mustChangePassword: number }>();
   if (!member) return null;
-  return { ...member, authProvider: "local" };
+  return { email:member.email, name:member.name, role:member.role, mustChangePassword:Boolean(member.mustChangePassword), authProvider: "local" };
 }
 
 export async function hashPassword(password: string, salt = randomValue(16)) {
