@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type Status = "available" | "reserved" | "paid";
 type Role = "admin" | "user" | "treasury";
@@ -9,7 +9,7 @@ type Square = {
   reservedByEmail: string; reservedByName: string; reservedAt: string;
   paidByEmail: string; paidByName: string; paidAt: string;
 };
-type Member = { email: string; name: string; role: Role; active: number };
+type Member = { email: string; name: string; role: Role; active: number; username?: string; approvalStatus?: "pending" | "approved" | "suspended"; authProvider?: "local" | "chatgpt" };
 type Activity = { id: number; squareId: number | null; action: string; actorName: string; actorRole: Role; previousStatus: string; newStatus: string; details: string; createdAt: string };
 type Game = { date: string; visitor: string; home: string };
 type ReportRow = { name:string; reserved:number; paid:number; total:number };
@@ -97,7 +97,8 @@ export default function Home() {
   async function saveMember(member: Member, originalEmail = "") {
     setSaving(true);
     try {
-      const data = await put({ action:"member", ...member, originalEmail, active:Boolean(member.active) });
+      const submittedMember = originalEmail && member.approvalStatus === "pending" ? {...member,active:1,approvalStatus:"approved" as const} : member;
+      const data = await put({ action:"member", ...submittedMember, originalEmail, active:Boolean(submittedMember.active) });
       setMembers(data.members);
       await loadBoard();
       setNotice(`Acceso de ${member.name} actualizado`);
@@ -118,6 +119,12 @@ export default function Home() {
     }
     catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo retirar el acceso."); return false; }
     finally { setSaving(false); }
+  }
+
+  async function signOut() {
+    if (me?.authProvider === "chatgpt") { window.location.href = "/signout-with-chatgpt?return_to=%2F"; return; }
+    try { await fetch("/api/auth", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action:"logout"}) }); }
+    finally { window.location.reload(); }
   }
 
   async function openFlyer() {
@@ -179,7 +186,7 @@ export default function Home() {
     <header className="topbar">
       <img className="club-logo header-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" />
       <div className="brand-copy"><h1>Quiniela MNF <span>2026</span></h1></div>
-      <div className="account-chip"><div><strong>{me?.name}</strong><span>{roleLabel(me?.role ?? "user")}</span></div><a href="/signout-with-chatgpt?return_to=%2F" aria-label="Cerrar sesión">Salir</a></div>
+      <div className="account-chip"><div><strong>{me?.name}</strong><span>{roleLabel(me?.role ?? "user")}</span></div><button onClick={signOut} aria-label="Cerrar sesión">Salir</button></div>
     </header>
 
     <section className="hero sports-hero">
@@ -231,7 +238,33 @@ export default function Home() {
 }
 
 function AccessScreen({ state, email }:{ state:"loading"|"signin"|"denied"; email:string }) {
-  return <main className="access-screen"><div className="access-card"><img src="/logo-crjc.png" alt="Rotary Juárez Concordia"/><p className="kicker">Quiniela MNF 2026</p>{state === "loading" ? <><h1>Preparando tu tablero</h1><div className="access-loader"/></> : state === "signin" ? <><h1>Identifica tu acceso</h1><p>Inicia sesión para consultar el tablero y aplicar los permisos de tu rol.</p><a className="access-button" href="/signin-with-chatgpt?return_to=%2F">Iniciar sesión con ChatGPT</a></> : <><h1>Acceso pendiente</h1><p>La cuenta <strong>{email || "actual"}</strong> todavía no está registrada. Pide al administrador que te agregue desde Reportes → Accesos.</p><a className="access-button secondary-link" href="/signout-with-chatgpt?return_to=%2F">Usar otra cuenta</a></>}</div></main>;
+  const [mode,setMode] = useState<"login"|"register">("login");
+  const [name,setName] = useState("");
+  const [username,setUsername] = useState("");
+  const [password,setPassword] = useState("");
+  const [confirmPassword,setConfirmPassword] = useState("");
+  const [message,setMessage] = useState("");
+  const [submitting,setSubmitting] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setMessage("");
+    if (mode === "register" && password !== confirmPassword) { setMessage("Las contraseñas no coinciden"); return; }
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/auth", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ action:mode, name, username, password }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No fue posible continuar");
+      if (mode === "login") window.location.reload();
+      else { setMessage(data.message); setPassword(""); setConfirmPassword(""); }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No fue posible continuar"); }
+    finally { setSubmitting(false); }
+  }
+  if (state === "loading") return <main className="access-screen"><div className="access-card loading-card"><img src="/logo-crjc.png" alt="Rotary Juárez Concordia"/><p className="kicker">Quiniela MNF 2026</p><h1>Preparando tu tablero</h1><div className="access-loader"/></div></main>;
+  return <main className="access-screen"><div className="access-card auth-card"><img src="/logo-crjc.png" alt="Rotary Juárez Concordia"/><p className="kicker">Quiniela MNF 2026</p><h1>{mode === "login" ? "Bienvenido al juego" : "Solicita tu acceso"}</h1><p>{mode === "login" ? "Entra con el usuario y contraseña registrados para tu cuenta." : "Crea tus datos de acceso. Un administrador deberá aprobar tu solicitud antes de que puedas entrar."}</p>
+    <div className="auth-switch"><button className={mode==="login"?"active":""} onClick={()=>{setMode("login");setMessage("");}}>Iniciar sesión</button><button className={mode==="register"?"active":""} onClick={()=>{setMode("register");setMessage("");}}>Solicitar acceso</button></div>
+    <form className="auth-form" onSubmit={submit}>{mode === "register" && <label>Nombre completo<input value={name} onChange={(event)=>setName(event.target.value)} autoComplete="name" required minLength={3} maxLength={80} placeholder="Nombre del socio"/></label>}<label>Usuario<input value={username} onChange={(event)=>setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9._-]/g,""))} autoComplete="username" required minLength={4} maxLength={30} placeholder="Ej. marioblanco"/></label><label>Contraseña<input value={password} onChange={(event)=>setPassword(event.target.value)} type="password" autoComplete={mode==="login"?"current-password":"new-password"} required minLength={8} maxLength={128} placeholder="Mínimo 8 caracteres"/></label>{mode === "register" && <label>Confirmar contraseña<input value={confirmPassword} onChange={(event)=>setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={8} maxLength={128}/></label>}<button className="access-button" disabled={submitting}>{submitting?"Procesando…":mode==="login"?"Entrar al tablero":"Enviar solicitud"}</button></form>
+    {message && <p className="auth-message" role="status">{message}</p>}{state === "denied" && <p className="legacy-warning">La cuenta anterior {email && <strong>{email}</strong>} no tiene acceso. Puedes usar una cuenta propia o solicitarla aquí.</p>}
+    <div className="legacy-access"><span>Transición administrativa</span><a href="/signin-with-chatgpt?return_to=%2F">Entrar con el acceso anterior de ChatGPT</a></div>
+  </div></main>;
 }
 
 function SquareModal({ square, me, members, saving, onClose, onSave }:{ square:Square; me:Member; members:Member[]; saving:boolean; onClose:()=>void; onSave:(square:Square)=>void }) {
@@ -255,16 +288,17 @@ function SquareModal({ square, me, members, saving, onClose, onSave }:{ square:S
 
 function Reports({ rows, squares, activity, me, members, saving, generatingFlyer, onGenerateFlyer, onSaveMember, onRemoveMember }:{ rows:ReportRow[]; squares:Square[]; activity:Activity[]; me:Member; members:Member[]; saving:boolean; generatingFlyer:boolean; onGenerateFlyer:()=>void; onSaveMember:(member:Member,originalEmail?:string)=>Promise<boolean>; onRemoveMember:(member:Member)=>Promise<boolean> }) {
   const [reportView,setReportView] = useState<"summary"|"activity"|"access">("summary");
-  const [draft,setDraft] = useState<Member>({email:"",name:"",role:"user",active:1});
+  const [draft,setDraft] = useState<Member>({email:"",name:"",role:"user",active:1,approvalStatus:"approved"});
   const [editingEmail,setEditingEmail] = useState("");
-  const resetMemberForm = () => { setDraft({email:"",name:"",role:"user",active:1}); setEditingEmail(""); };
+  const resetMemberForm = () => { setDraft({email:"",name:"",role:"user",active:1,approvalStatus:"approved"}); setEditingEmail(""); };
+  const pendingCount = members.filter((member)=>member.approvalStatus==="pending").length;
   const totals = { reserved:rows.reduce((n,row)=>n+row.reserved,0), paid:rows.reduce((n,row)=>n+row.paid,0), total:rows.reduce((n,row)=>n+row.total,0) };
   return <section className="content reports-section"><div className="section-heading"><div><p className="kicker">Control y seguimiento</p><h3>Reportes</h3></div><span className="year-pill">{squares.filter((s)=>s.status!=="available").length} vendidas</span></div>
-    <div className="report-switch"><button className={reportView==="summary"?"active":""} onClick={()=>setReportView("summary")}>Sumario por socio</button><button className={reportView==="activity"?"active":""} onClick={()=>setReportView("activity")}>Actividad</button>{me.role==="admin"&&<button className={reportView==="access"?"active":""} onClick={()=>setReportView("access")}>Accesos</button>}</div>
+    <div className="report-switch"><button className={reportView==="summary"?"active":""} onClick={()=>setReportView("summary")}>Sumario por socio</button><button className={reportView==="activity"?"active":""} onClick={()=>setReportView("activity")}>Actividad</button>{me.role==="admin"&&<button className={reportView==="access"?"active":""} onClick={()=>setReportView("access")}>Accesos{pendingCount>0&&<b className="pending-count">{pendingCount}</b>}</button>}</div>
     {reportView === "summary" && <div className="report-card"><div className="report-card-head"><div><h4>Casillas reservadas y pagadas por socio</h4><p>Las casillas se atribuyen al socio que realizó la venta.</p></div><div className="report-head-actions">{me.role==="admin"&&<button className="report-flyer-button" onClick={onGenerateFlyer} disabled={generatingFlyer}>{generatingFlyer?"Generando…":"🏈 Flier de avance"}</button>}<div className="report-value"><strong>${totals.paid*100}</strong><span>cobrado</span></div></div></div><div className="report-table-wrap"><table className="report-table"><thead><tr><th>Socio</th><th>Reservada</th><th>Pagada</th><th>Total</th></tr></thead><tbody>{rows.map((row)=><tr key={row.name}><td>{row.name}</td><td>{row.reserved || ""}</td><td>{row.paid || ""}</td><td><strong>{row.total}</strong></td></tr>)}</tbody><tfoot><tr><td>Total general</td><td>{totals.reserved}</td><td>{totals.paid}</td><td>{totals.total}</td></tr></tfoot></table></div></div>}
     {reportView === "activity" && <div className="report-card"><div className="report-card-head"><div><h4>Actividad reciente</h4><p>Quién reservó, cobró o modificó cada casilla.</p></div></div><div className="activity-list">{activity.length ? activity.map((item)=><article key={item.id}><span className={`activity-icon ${item.action}`}>{activityIcon(item.action)}</span><div><strong>{item.actorName}</strong><p>{activityText(item)}</p><small>{formatDate(item.createdAt)} · {roleLabel(item.actorRole)}</small></div>{item.squareId&&<b>#{item.squareId}</b>}</article>) : <p className="empty-report">La actividad nueva aparecerá aquí.</p>}</div></div>}
-    {reportView === "access" && <div className="access-management"><div className="member-form report-card"><div className="report-card-head"><div><h4>{editingEmail ? "Editar acceso" : "Agregar acceso"}</h4><p>Puedes actualizar nombre, correo, nivel y estado del socio.</p></div>{editingEmail && <button className="form-cancel" onClick={resetMemberForm}>Cancelar</button>}</div><div className="member-form-grid"><label>Nombre<input value={draft.name} onChange={(e)=>setDraft({...draft,name:e.target.value})} placeholder="Nombre del socio"/></label><label>Correo de acceso<input value={draft.email} onChange={(e)=>setDraft({...draft,email:e.target.value})} type="email" placeholder="socio@correo.com"/></label><label>Nivel<select value={draft.role} onChange={(e)=>setDraft({...draft,role:e.target.value as Role})}><option value="user">Usuario</option><option value="treasury">Tesorería</option><option value="admin">Administrador</option></select></label><label>Estado<select value={draft.active} onChange={(e)=>setDraft({...draft,active:Number(e.target.value)})}><option value={1}>Activo</option><option value={0}>Suspendido</option></select></label></div><button className="primary member-save" disabled={saving||!draft.name||!draft.email} onClick={async()=>{if(await onSaveMember(draft,editingEmail))resetMemberForm();}}>{saving?"Guardando…":editingEmail?"Guardar cambios":"Agregar acceso"}</button></div>
-      <div className="report-card member-list"><div className="report-card-head"><div><h4>Personas autorizadas</h4><p>{members.filter((member)=>member.active).length} accesos activos</p></div></div>{members.map((member)=><article key={member.email}><div><strong>{member.name}</strong><span>{member.email}</span></div><span className={member.active?"member-active":"member-inactive"}>{member.active?roleLabel(member.role):"Suspendido"}</span><div className="member-actions"><button className="member-edit" onClick={()=>{setDraft({...member});setEditingEmail(member.email);}}>Editar</button><button className="member-remove" disabled={member.email===me.email||saving} onClick={async()=>{if(window.confirm(`¿Retirar el acceso de ${member.name}?`)&&await onRemoveMember(member)){if(editingEmail===member.email)resetMemberForm();}}}>Retirar</button></div></article>)}</div>
+    {reportView === "access" && <div className="access-management"><div className="member-form report-card"><div className="report-card-head"><div><h4>{editingEmail ? "Editar acceso" : "Agregar acceso anterior"}</h4><p>{draft.approvalStatus==="pending"?"Revisa la solicitud, asigna el nivel y aprueba al nuevo usuario.":"Administra nombre, nivel y estado. Las cuentas nuevas se crean desde Solicitar acceso."}</p></div>{editingEmail && <button className="form-cancel" onClick={resetMemberForm}>Cancelar</button>}</div><div className="member-form-grid"><label>Nombre<input value={draft.name} onChange={(e)=>setDraft({...draft,name:e.target.value})} placeholder="Nombre del socio"/></label>{draft.username?<label>Usuario<input value={draft.username} readOnly/></label>:<label>Correo de acceso anterior<input value={draft.email} onChange={(e)=>setDraft({...draft,email:e.target.value})} type="email" disabled={Boolean(editingEmail&&draft.email.startsWith("local:"))} placeholder="socio@correo.com"/></label>}<label>Nivel<select value={draft.role} onChange={(e)=>setDraft({...draft,role:e.target.value as Role})}><option value="user">Usuario</option><option value="treasury">Tesorería</option><option value="admin">Administrador</option></select></label><label>Estado<select value={draft.approvalStatus??(draft.active?"approved":"suspended")} onChange={(e)=>{const status=e.target.value as "pending"|"approved"|"suspended";setDraft({...draft,approvalStatus:status,active:status==="approved"?1:0});}}><option value="pending" disabled={!draft.username}>Pendiente</option><option value="approved">Activo</option><option value="suspended">Suspendido</option></select></label></div><button className="primary member-save" disabled={saving||!draft.name||!draft.email} onClick={async()=>{if(await onSaveMember(draft,editingEmail))resetMemberForm();}}>{saving?"Guardando…":draft.approvalStatus==="pending"?"Aprobar y guardar":editingEmail?"Guardar cambios":"Agregar acceso"}</button></div>
+      <div className="report-card member-list"><div className="report-card-head"><div><h4>Usuarios y solicitudes</h4><p>{members.filter((member)=>member.active).length} activos · {pendingCount} pendientes</p></div></div>{members.map((member)=>{const pending=member.approvalStatus==="pending";return <article className={pending?"member-pending":""} key={member.email}><div><strong>{member.name}</strong><span>{member.username?`@${member.username}`:member.email}</span></div><span className={pending?"member-awaiting":member.active?"member-active":"member-inactive"}>{pending?"Pendiente":member.active?roleLabel(member.role):"Suspendido"}</span><div className="member-actions">{pending&&<button className="member-approve" disabled={saving} onClick={()=>onSaveMember({...member,active:1,approvalStatus:"approved"},member.email)}>Aprobar</button>}<button className="member-edit" onClick={()=>{setDraft({...member});setEditingEmail(member.email);}}>Editar</button><button className="member-remove" disabled={member.email===me.email||saving} onClick={async()=>{if(window.confirm(`${pending?"¿Rechazar la solicitud":"¿Retirar el acceso"} de ${member.name}?`)&&await onRemoveMember(member)){if(editingEmail===member.email)resetMemberForm();}}}>{pending?"Rechazar":"Retirar"}</button></div></article>})}</div>
     </div>}
   </section>;
 }

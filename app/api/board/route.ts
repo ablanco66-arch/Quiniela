@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { ensureLocalAuthSchema, getLocalActor } from "../../lib/local-auth";
 
 type Role = "admin" | "user" | "treasury";
 type SeedSquare = { id: number; status: "reserved" | "paid"; participant: string; contact: string };
-type Actor = { email: string; name: string; role: Role };
+type Actor = { email: string; name: string; role: Role; authProvider: "local" | "chatgpt" };
 const INITIAL_ADMIN_EMAIL = "ablanco66@gmail.com";
 const INITIAL_ADMIN_NAME = "Andrés Blanco";
 
@@ -13,10 +14,10 @@ const occupied: SeedSquare[] = [
 
 async function ensureDatabase() {
   const db = env.DB;
+  await ensureLocalAuthSchema();
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS squares (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'available', participant TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', reserved_by_email TEXT NOT NULL DEFAULT '', reserved_by_name TEXT NOT NULL DEFAULT '', reserved_at TEXT NOT NULL DEFAULT '', paid_by_email TEXT NOT NULL DEFAULT '', paid_by_name TEXT NOT NULL DEFAULT '', paid_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS members (email TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, square_id INTEGER, action TEXT NOT NULL, actor_email TEXT NOT NULL, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, previous_status TEXT NOT NULL DEFAULT '', new_status TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS activity_created_at_idx ON activity (created_at DESC)`),
   ]);
@@ -55,24 +56,26 @@ async function ensureDatabase() {
   ]);
 }
 
-async function getActor(): Promise<Actor | Response> {
+async function getActor(request: Request): Promise<Actor | Response> {
+  const localActor = await getLocalActor(request);
+  if (localActor) return localActor;
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Inicia sesión para continuar", code: "AUTH_REQUIRED" }, { status: 401 });
   await ensureDatabase();
   const email = user.email.trim().toLowerCase();
   const member = await env.DB.prepare("SELECT email, name, role, active FROM members WHERE email = ?").bind(email).first<{ email: string; name: string; role: Role; active: number }>();
   if (!member?.active) return Response.json({ error: "Tu cuenta no está autorizada para esta quiniela", code: "ACCESS_DENIED", email }, { status: 403 });
-  return { email: member.email, name: member.name || user.displayName, role: member.role };
+  return { email: member.email, name: member.name || user.displayName, role: member.role, authProvider: "chatgpt" };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const actor = await getActor();
+    const actor = await getActor(request);
     if (actor instanceof Response) return actor;
     const [squareResult, settings, memberResult, activityResult] = await Promise.all([
       env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares ORDER BY id`).all(),
       env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first(),
-      actor.role === "admin" ? env.DB.prepare("SELECT email, name, role, active FROM members ORDER BY name, email").all() : Promise.resolve({ results: [] }),
+      actor.role === "admin" ? env.DB.prepare("SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email").all() : Promise.resolve({ results: [] }),
       env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY id DESC LIMIT 60").all(),
     ]);
     return Response.json({ squares: squareResult.results, settings, me: actor, members: memberResult.results, activity: activityResult.results });
@@ -83,7 +86,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const actor = await getActor();
+    const actor = await getActor(request);
     if (actor instanceof Response) return actor;
     const payload = await request.json() as Record<string, unknown>;
 
@@ -106,43 +109,55 @@ export async function PUT(request: Request) {
       const name = String(payload.name ?? "").trim();
       const role = String(payload.role ?? "") as Role;
       const active = payload.active === false ? 0 : 1;
-      if (!emailPattern(email) || !name || !["admin", "user", "treasury"].includes(role)) return Response.json({ error: "Datos de usuario inválidos" }, { status: 400 });
+      const requestedApproval = String(payload.approvalStatus ?? "");
+      const approvalStatus = ["pending", "approved", "suspended"].includes(requestedApproval) ? requestedApproval : active ? "approved" : "suspended";
+      if (!(emailPattern(email) || isLocalIdentity(email)) || !name || !["admin", "user", "treasury"].includes(role)) return Response.json({ error: "Datos de usuario inválidos" }, { status: 400 });
       if ((originalEmail || email) === actor.email && (email !== actor.email || role !== "admin" || !active)) return Response.json({ error: "No puedes cambiar tu correo, rol o acceso de administrador" }, { status: 400 });
       if (originalEmail) {
-        const existing = await env.DB.prepare("SELECT email, name FROM members WHERE email = ?").bind(originalEmail).first<{email:string;name:string}>();
+        const existing = await env.DB.prepare("SELECT email, name, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members WHERE email = ?").bind(originalEmail).first<{email:string;name:string;username:string;approvalStatus:string}>();
         if (!existing) return Response.json({ error: "El usuario que deseas editar ya no existe" }, { status: 404 });
+        if (isLocalIdentity(originalEmail) && email !== originalEmail) return Response.json({ error: "El identificador interno de una cuenta propia no puede cambiarse" }, { status: 400 });
         const duplicate = email !== originalEmail ? await env.DB.prepare("SELECT email FROM members WHERE email = ?").bind(email).first() : null;
         if (duplicate) return Response.json({ error: "Ese correo ya pertenece a otro usuario" }, { status: 400 });
-        await env.DB.batch([
-          env.DB.prepare("UPDATE members SET email = ?, name = ?, role = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?").bind(email, name, role, active, originalEmail),
+        const approvingOwnAccount = Boolean(existing.username) && existing.approvalStatus === "pending" && approvalStatus === "approved" && active;
+        const statements = [
+          env.DB.prepare("UPDATE members SET email = ?, name = ?, role = ?, active = ?, approval_status = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?").bind(email, name, role, active, approvalStatus, originalEmail),
           env.DB.prepare("UPDATE squares SET reserved_by_email = ?, reserved_by_name = ? WHERE reserved_by_email = ? OR (reserved_by_email = '' AND reserved_by_name = ?)").bind(email, name, originalEmail, existing.name),
           env.DB.prepare("UPDATE squares SET paid_by_email = ?, paid_by_name = ? WHERE paid_by_email = ?").bind(email, name, originalEmail),
-          activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${active ? "activo" : "suspendido"}`),
-        ]);
+          activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${approvalStatus === "pending" ? "pendiente" : active ? "activo" : "suspendido"}`),
+        ];
+        if (approvingOwnAccount) {
+          statements.push(env.DB.prepare("UPDATE squares SET reserved_by_email = ?, reserved_by_name = ? WHERE reserved_by_name = ?").bind(email, name, existing.name));
+          statements.push(env.DB.prepare("UPDATE squares SET paid_by_email = ?, paid_by_name = ? WHERE paid_by_name = ?").bind(email, name, existing.name));
+        }
+        if (!active) statements.push(env.DB.prepare("DELETE FROM sessions WHERE member_email = ?").bind(originalEmail));
+        await env.DB.batch(statements);
       } else {
+        if (!emailPattern(email)) return Response.json({ error: "Para agregar un acceso anterior se requiere un correo válido; las cuentas propias se crean desde Solicitar acceso" }, { status: 400 });
         const duplicate = await env.DB.prepare("SELECT email FROM members WHERE email = ?").bind(email).first();
         if (duplicate) return Response.json({ error: "Ese correo ya está registrado; usa Editar" }, { status: 400 });
         await env.DB.batch([
-          env.DB.prepare("INSERT INTO members (email, name, role, active) VALUES (?, ?, ?, ?)").bind(email, name, role, active),
+          env.DB.prepare("INSERT INTO members (email, name, role, active, approval_status) VALUES (?, ?, ?, ?, ?)").bind(email, name, role, active, approvalStatus),
           activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${active ? "activo" : "suspendido"}`),
         ]);
       }
-      const members = await env.DB.prepare("SELECT email, name, role, active FROM members ORDER BY name, email").all();
+      const members = await env.DB.prepare("SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email").all();
       return Response.json({ members: members.results });
     }
 
     if (payload.action === "member_remove") {
       if (actor.role !== "admin") return forbidden();
       const email = String(payload.email ?? "").trim().toLowerCase();
-      if (!emailPattern(email)) return Response.json({ error: "Usuario inválido" }, { status: 400 });
+      if (!(emailPattern(email) || isLocalIdentity(email))) return Response.json({ error: "Usuario inválido" }, { status: 400 });
       if (email === actor.email) return Response.json({ error: "No puedes retirar tu propio acceso de administrador" }, { status: 400 });
       const member = await env.DB.prepare("SELECT name FROM members WHERE email = ?").bind(email).first<{name:string}>();
       if (!member) return Response.json({ error: "El usuario ya no existe" }, { status: 404 });
       await env.DB.batch([
+        env.DB.prepare("DELETE FROM sessions WHERE member_email = ?").bind(email),
         env.DB.prepare("DELETE FROM members WHERE email = ?").bind(email),
         activity(actor, null, "member_removed", "", "", member.name),
       ]);
-      const members = await env.DB.prepare("SELECT email, name, role, active FROM members ORDER BY name, email").all();
+      const members = await env.DB.prepare("SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email").all();
       return Response.json({ members: members.results });
     }
 
@@ -181,7 +196,7 @@ export async function PUT(request: Request) {
       if (actor.role === "admin") {
         const requestedSellerName = String(payload.reservedByName ?? reservedByName).trim();
         if (!requestedSellerName) return Response.json({ error: "Selecciona al socio que vendió la casilla" }, { status: 400 });
-        const registeredSeller = await env.DB.prepare("SELECT email, name FROM members WHERE name = ? AND active = 1").bind(requestedSellerName).first<{email:string;name:string}>();
+        const registeredSeller = await env.DB.prepare("SELECT email, name FROM members WHERE name = ? AND active = 1 AND approval_status = 'approved' ORDER BY CASE WHEN COALESCE(username, '') <> '' THEN 0 ELSE 1 END LIMIT 1").bind(requestedSellerName).first<{email:string;name:string}>();
         const unchangedLegacySeller = current.status !== "available" && requestedSellerName === String(current.reservedByName ?? "") && !registeredSeller;
         if (!registeredSeller && !unchangedLegacySeller) return Response.json({ error: "Selecciona un socio activo registrado" }, { status: 400 });
         if (registeredSeller) { reservedByEmail = registeredSeller.email; reservedByName = registeredSeller.name; }
@@ -220,4 +235,5 @@ function forbidden(message = "Tu nivel de acceso no permite este cambio") { retu
 function sellerName(value: string) { const name = value.split(" · ")[0].trim(); return name === "JC Olivares" ? "Juan Carlos Olivares" : name === "Cabi Flores" ? "Cabiria Flores" : name; }
 function validDigits(value: string) { return value.length === 10 && new Set(value).size === 10 && [...value].every((digit) => "0123456789".includes(digit)); }
 function emailPattern(value: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
+function isLocalIdentity(value: string) { return /^local:[0-9a-f-]{36}$/.test(value); }
 function roleLabel(role: Role) { return role === "admin" ? "Administrador" : role === "treasury" ? "Tesorería" : "Usuario"; }

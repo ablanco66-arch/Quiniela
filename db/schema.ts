@@ -28,9 +28,22 @@ export const members = sqliteTable("members", {
   name: text("name").notNull(),
   role: text("role").notNull().default("user"),
   active: integer("active").notNull().default(1),
+  username: text("username").unique(),
+  passwordSalt: text("password_salt").notNull().default(""),
+  passwordHash: text("password_hash").notNull().default(""),
+  approvalStatus: text("approval_status").notNull().default("approved"),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil: text("locked_until").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const sessions = sqliteTable("sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  memberEmail: text("member_email").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("sessions_member_idx").on(table.memberEmail), index("sessions_expires_idx").on(table.expiresAt)]);
 
 export const activity = sqliteTable("activity", {
   id: integer("id").primaryKey({ autoIncrement: true }),

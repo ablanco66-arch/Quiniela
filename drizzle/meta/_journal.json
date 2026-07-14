@@ -15,6 +15,13 @@
       "when": 1783936689420,
       "tag": "0001_eager_luminals",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784021905202,
+      "tag": "0002_polite_proudstar",
+      "breakpoints": true
     }
   ]
 }
