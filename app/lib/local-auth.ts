@@ -5,7 +5,7 @@ export type LocalActor = { email: string; name: string; role: LocalRole; authPro
 
 const SESSION_COOKIE = "quiniela_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
-const PBKDF2_ITERATIONS = 210_000;
+const PBKDF2_ITERATIONS = 100_000;
 
 export async function ensureLocalAuthSchema() {
   const db = env.DB;

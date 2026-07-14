@@ -251,7 +251,8 @@ function AccessScreen({ state, email }:{ state:"loading"|"signin"|"denied"; emai
     setSubmitting(true);
     try {
       const response = await fetch("/api/auth", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ action:mode, name, username, password }) });
-      const data = await response.json();
+      const responseText = await response.text();
+      const data = responseText ? JSON.parse(responseText) : {};
       if (!response.ok) throw new Error(data.error || "No fue posible continuar");
       if (mode === "login") window.location.reload();
       else { setMessage(data.message); setPassword(""); setConfirmPassword(""); }

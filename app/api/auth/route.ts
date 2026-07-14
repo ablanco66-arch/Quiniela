@@ -31,7 +31,8 @@ async function register(payload: Record<string, unknown>) {
   if (name.length < 3 || name.length > 80) return json({ error: "Escribe tu nombre completo" }, 400);
   if (!validUsername(username)) return json({ error: "El usuario debe tener de 4 a 30 caracteres: letras, números, punto, guion o guion bajo" }, 400);
   if (password.length < 8 || password.length > 128) return json({ error: "La contraseña debe tener al menos 8 caracteres" }, 400);
-  const duplicate = await env.DB.prepare("SELECT email FROM members WHERE username = ?").bind(username).first();
+  const duplicate = await env.DB.prepare("SELECT email, approval_status AS approvalStatus FROM members WHERE username = ?").bind(username).first<{email:string;approvalStatus:string}>();
+  if (duplicate?.approvalStatus === "pending") return json({ ok: true, message: "Tu solicitud ya está registrada y continúa pendiente de aprobación." });
   if (duplicate) return json({ error: "Ese nombre de usuario ya está registrado" }, 409);
   const credentials = await hashPassword(password);
   const email = `local:${crypto.randomUUID()}`;
@@ -67,5 +68,5 @@ async function login(payload: Record<string, unknown>) {
 function json(body: Record<string, unknown>, status = 200, cookie = "") {
   const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store" });
   if (cookie) headers.set("Set-Cookie", cookie);
-  return new Response(JSON.stringify(body), { status, headers });
+  return Response.json(body, { status, headers });
 }
