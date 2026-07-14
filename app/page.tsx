@@ -185,6 +185,7 @@ export default function Home() {
 
   if (accessState !== "ready") return <AccessScreen state={accessState} email={accessEmail} />;
   const filteredIds = new Set(squares.filter((square) => filter === "all" || square.status === filter).map((square) => square.id));
+  const boardLocked = isDigitSet(visitorDigits) && isDigitSet(homeDigits);
 
   return <main>
     <header className="topbar">
@@ -219,13 +220,13 @@ export default function Home() {
         <button className={filter === "paid" ? "summary active" : "summary"} onClick={() => setFilter(filter === "paid" ? "all" : "paid")}><span className="dot paid"/><div><strong>{counts.paid}</strong><small>Pagadas</small></div></button>
         <div className="summary raised"><span className="dot goal">$</span><div><strong>${(counts.reserved + counts.paid) * 100}</strong><small>Comprometidos</small></div></div>
       </div>
-      <div className="board-card"><div className="board-meta"><div className="legend"><span><i className="available"/>Disponible</span><span><i className="reserved"/>Reservada</span><span><i className="paid"/>Pagada</span></div><p>Toca una casilla para ver sus datos</p></div>
+      <div className="board-card"><div className="board-meta"><div className="legend"><span><i className="available"/>Disponible</span><span><i className="reserved"/>Reservada</span><span><i className="paid"/>Pagada</span></div><p>{boardLocked ? "Tablero cerrado · números de juego cargados" : "Toca una casilla para ver sus datos"}</p></div>
         <div className="board-scroll"><div className="visitor-label">VISITANTE</div><div className="board-with-axis"><div className="home-label">CASA</div><div className="grid-shell">
           <div className="corner-cell">VS</div>{(visitorDigits || "          ").padEnd(10).slice(0,10).split("").map((digit,index) => <div className="digit top" key={`v-${index}`}>{digit || "?"}</div>)}
           {(homeDigits || "          ").padEnd(10).slice(0,10).split("").map((digit,row) => <div className="row-group" key={`row-${row}`}><div className="digit side">{digit || "?"}</div>{squares.slice(row*10,row*10+10).map((square) => <button key={square.id} className={`square ${square.status} ${filteredIds.has(square.id) ? "" : "dimmed"} ${isOwned(square, me!) ? "mine" : ""}`} onClick={() => setSelected(square)} aria-label={`Casilla ${square.id}, ${labelFor(square.status)}${square.participant ? `, ${square.participant}` : ""}`}><span>{square.id}</span>{square.status !== "available" && <b>{initials(square.participant)}</b>}{isOwned(square, me!) && <i className="mine-badge">Mía</i>}</button>)}</div>)}
         </div></div></div>
       </div>
-      <div className="permission-note"><span>{roleIcon(me!.role)}</span><div><strong>Acceso: {roleLabel(me!.role)}</strong><p>{roleHelp(me!.role)}</p></div></div>
+      <div className="permission-note"><span>{roleIcon(me!.role)}</span><div><strong>Acceso: {roleLabel(me!.role)}</strong><p>{roleHelp(me!.role,boardLocked)}</p></div></div>
       <div className="deadline"><span>!</span><div><strong>Fecha límite de pago</strong><p>Las casillas deben cubrirse en su totalidad antes del 14 de septiembre de 2026.</p></div></div>
     </section>}
 
@@ -235,7 +236,7 @@ export default function Home() {
 
     <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
 
-    {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} onClose={() => setSelected(null)} onSave={saveSquare} />}
+    {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} boardLocked={boardLocked} onClose={() => setSelected(null)} onSave={saveSquare} />}
     {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">Listo para compartir</p><h3 id="flyer-title">{flyerType==="report"?"Flier de avance":"Flier de la quiniela"}</h3><p>{flyerType==="report"?"El reporte refleja el avance más reciente por socio.":"La imagen refleja el estado actual del tablero."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="report"?"Flier del avance de casillas por socio":"Flier vertical de la Quiniela MNF 2026 con tablero y reglas"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>Guardar PNG</button></div></section></div>}
     {showDigits && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowDigits(false)}><section className="modal digits-modal" role="dialog" aria-modal="true" aria-labelledby="digits-title"><button className="modal-close" onClick={() => setShowDigits(false)} aria-label="Cerrar">×</button><p className="kicker">Inicio de temporada</p><h3 id="digits-title">Números de juego</h3><p className="modal-help">Déjalos vacíos hasta el sorteo. Después, ingresa los 10 dígitos en el orden asignado.</p><label>Columnas — visitante<input value={visitorDigits} onChange={(e) => setVisitorDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 7451029863" /></label><label>Renglones — casa<input value={homeDigits} onChange={(e) => setHomeDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 0294831756" /></label><div className="modal-actions"><button className="secondary" onClick={() => {setVisitorDigits("");setHomeDigits("");}}>Limpiar</button><button className="primary" onClick={saveDigits} disabled={saving}>{saving ? "Guardando…" : "Guardar números"}</button></div></section></div>}
   </main>;
@@ -275,12 +276,12 @@ function AccessScreen({ state, email }:{ state:"loading"|"signin"|"denied"|"pass
   </div></main>;
 }
 
-function SquareModal({ square, me, members, saving, onClose, onSave }:{ square:Square; me:Member; members:Member[]; saving:boolean; onClose:()=>void; onSave:(square:Square)=>void }) {
+function SquareModal({ square, me, members, saving, boardLocked, onClose, onSave }:{ square:Square; me:Member; members:Member[]; saving:boolean; boardLocked:boolean; onClose:()=>void; onSave:(square:Square)=>void }) {
   const [draft,setDraft] = useState(square);
   const owns = isOwned(square,me); const admin = me.role === "admin"; const treasuryPayment = me.role === "treasury" && square.status === "reserved"; const treasuryOther = treasuryPayment && !owns;
-  const editableDetails = admin || owns || square.status === "available";
+  const editableDetails = admin || (!boardLocked && (owns || square.status === "available"));
   const statuses = (["available","reserved","paid"] as Status[]);
-  const allowed = (status:Status) => admin || (square.status === "available" && status === "reserved") || (owns && square.status === "reserved" && (status === "reserved" || (me.role === "treasury" && status === "paid"))) || (owns && square.status === "paid" && status === "paid") || (treasuryOther && status === "paid");
+  const allowed = (status:Status) => admin || (boardLocked ? treasuryPayment && status === "paid" : (square.status === "available" && status === "reserved") || (owns && square.status === "reserved" && (status === "reserved" || (me.role === "treasury" && status === "paid"))) || (owns && square.status === "paid" && status === "paid") || (treasuryOther && status === "paid"));
   const canSave = admin || allowed(draft.status);
   function update(field:keyof Square,value:string){ setDraft((current) => ({...current,[field]:value})); }
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="square-title"><button className="modal-close" onClick={onClose} aria-label="Cerrar">×</button><div className={`modal-number ${draft.status}`}>{draft.id}</div><div><p className="kicker">Detalle de casilla</p><h3 id="square-title">Casilla #{draft.id}</h3></div>
@@ -289,7 +290,7 @@ function SquareModal({ square, me, members, saving, onClose, onSave }:{ square:S
       {admin ? <label>Socio que la vendió<select value={draft.reservedByName} onChange={(e) => { const member = members.find((item) => item.name === e.target.value); setDraft((current) => ({...current,reservedByName:e.target.value,reservedByEmail:member?.email ?? current.reservedByEmail})); }}><option value="">Selecciona un socio registrado</option>{draft.reservedByName && !members.some((member) => member.name === draft.reservedByName) && <option value={draft.reservedByName}>{draft.reservedByName} (registro anterior)</option>}{members.filter((member) => member.active).map((member) => <option key={member.email} value={member.name}>{member.name}</option>)}</select></label> : <div className="ownership"><span>Vendida por</span><strong>{draft.reservedByName || (square.status === "available" ? me.name : "Sin asignar")}</strong></div>}
       {draft.status === "paid" && <div className="payment-proof"><span>Pago confirmado por</span><strong>{draft.paidByName || "Se registrará al guardar"}</strong></div>}
     </>}
-    {!canSave && <p className="locked-message">Esta casilla fue vendida por otro socio. Puedes consultar sus datos, pero no modificarlos.</p>}
+    {!canSave && <p className="locked-message">{boardLocked ? "Los números de juego ya fueron cargados. El tablero está cerrado para nuevas reservas y ediciones." : "Esta casilla fue vendida por otro socio. Puedes consultar sus datos, pero no modificarlos."}</p>}
     <div className="modal-actions"><button className="secondary" onClick={onClose}>Cerrar</button>{canSave && <button className="primary" disabled={saving || (draft.status !== "available" && (!draft.participant.trim() || (admin && !draft.reservedByName.trim())))} onClick={() => onSave(draft)}>{saving ? "Guardando…" : treasuryPayment && draft.status === "paid" ? "Confirmar pago" : "Guardar cambios"}</button>}</div>
   </section></div>;
 }
@@ -396,7 +397,7 @@ function isOwned(square:Square,me:Member){ return Boolean(square.reservedByEmail
 function labelFor(status:Status){ return status==="available"?"Disponible":status==="reserved"?"Reservada":"Pagada"; }
 function roleLabel(role:Role){ return role==="admin"?"Administrador":role==="treasury"?"Tesorería":"Usuario"; }
 function roleIcon(role:Role){ return role==="admin"?"A":role==="treasury"?"T":"U"; }
-function roleHelp(role:Role){ return role==="admin"?"Puedes modificar cualquier dato, administrar accesos y configurar los números.":role==="treasury"?"Puedes reservar casillas y confirmar el pago de cualquier reservación.":"Puedes reservar casillas disponibles y actualizar los datos de las que tú vendiste. Tesorería confirmará los pagos."; }
+function roleHelp(role:Role,boardLocked=false){ if(role==="admin")return "Puedes modificar cualquier dato, administrar accesos y configurar los números.";if(boardLocked)return role==="treasury"?"El tablero está cerrado. Sólo puedes confirmar el pago de casillas reservadas.":"El tablero está cerrado. Puedes consultar las casillas, pero ya no reservarlas ni editarlas.";return role==="treasury"?"Puedes reservar casillas y confirmar el pago de cualquier reservación.":"Puedes reservar casillas disponibles y actualizar los datos de las que tú vendiste. Tesorería confirmará los pagos."; }
 function initials(name:string){ return name.split(/\s+/).filter(Boolean).slice(0,2).map((part)=>part[0]).join("").toUpperCase(); }
 function cleanDigits(value:string){ return value.replace(/\D/g,"").slice(0,10); }
 function isDigitSet(value:string){ return value.length===10&&new Set(value).size===10&&[...value].every((digit)=>"0123456789".includes(digit)); }

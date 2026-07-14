@@ -197,8 +197,11 @@ export async function PUT(request: Request) {
     if (!Number.isInteger(id) || id < 1 || id > 100 || !["available", "reserved", "paid"].includes(requestedStatus)) return Response.json({ error: "Datos inválidos" }, { status: 400 });
     const current = await env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares WHERE id = ?`).bind(id).first<Record<string, string | number>>();
     if (!current) return Response.json({ error: "Casilla no encontrada" }, { status: 404 });
+    const settings = await env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first<{visitorDigits:string;homeDigits:string}>();
+    const boardLocked = validDigits(String(settings?.visitorDigits ?? "")) && validDigits(String(settings?.homeDigits ?? ""));
     const owns = String(current.reservedByEmail ?? "").toLowerCase() === actor.email;
-    const treasuryPayment = actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid" && !owns;
+    const treasuryPayment = actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid" && (!owns || boardLocked);
+    if (boardLocked && actor.role !== "admin" && !(actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid")) return forbidden("El tablero está cerrado; sólo Administración puede editar y Tesorería confirmar pagos");
     if (actor.role === "user" && current.status === "reserved" && requestedStatus === "paid") return forbidden("Solo Tesorería y Administración pueden confirmar pagos");
     if (!canChangeSquare(actor.role, String(current.status), requestedStatus, owns)) return forbidden("No puedes modificar una casilla vendida por otro socio");
 
