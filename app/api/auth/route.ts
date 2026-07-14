@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { createSession, deleteSession, ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, validUsername, verifyPassword } from "../../lib/local-auth";
+import { createSession, deleteSession, ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, validPassword, validUsername, verifyPassword } from "../../lib/local-auth";
 
 type LoginMember = {
   email: string; name: string; role: string; active: number; username: string;
@@ -31,7 +31,7 @@ async function register(payload: Record<string, unknown>) {
   const password = String(payload.password ?? "");
   if (name.length < 3 || name.length > 80) return json({ error: "Escribe tu nombre completo" }, 400);
   if (!validUsername(username)) return json({ error: "El usuario debe tener de 4 a 30 caracteres: letras, números, punto, guion o guion bajo" }, 400);
-  if (password.length < 8 || password.length > 128) return json({ error: "La contraseña debe tener al menos 8 caracteres" }, 400);
+  if (!validPassword(password)) return json({ error: "La contraseña debe incluir al menos 8 caracteres, una minúscula, una mayúscula, un número y un símbolo especial" }, 400);
   const duplicate = await env.DB.prepare("SELECT email, approval_status AS approvalStatus FROM members WHERE username = ?").bind(username).first<{email:string;approvalStatus:string}>();
   if (duplicate?.approvalStatus === "pending") return json({ ok: true, message: "Tu solicitud ya está registrada y continúa pendiente de aprobación." });
   if (duplicate) return json({ error: "Ese nombre de usuario ya está registrado" }, 409);
@@ -71,7 +71,7 @@ async function changePassword(request: Request, payload: Record<string, unknown>
   const actor = await getLocalActor(request);
   if (!actor) return json({ error: "Tu sesión venció. Inicia nuevamente con la contraseña temporal." }, 401);
   const password = String(payload.password ?? "");
-  if (password.length < 8 || password.length > 128) return json({ error: "La nueva contraseña debe tener al menos 8 caracteres" }, 400);
+  if (!validPassword(password)) return json({ error: "La nueva contraseña debe incluir al menos 8 caracteres, una minúscula, una mayúscula, un número y un símbolo especial" }, 400);
   const credentials = await hashPassword(password);
   await env.DB.prepare("UPDATE members SET password_salt = ?, password_hash = ?, must_change_password = 0, failed_attempts = 0, locked_until = '', updated_at = CURRENT_TIMESTAMP WHERE email = ?")
     .bind(credentials.salt, credentials.hash, actor.email).run();

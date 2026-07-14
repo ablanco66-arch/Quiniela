@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, validUsername } from "../../lib/local-auth";
+import { ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, validPassword, validUsername } from "../../lib/local-auth";
 
 type Role = "admin" | "user" | "treasury";
 type SeedSquare = { id: number; status: "reserved" | "paid"; participant: string; contact: string };
@@ -111,7 +111,7 @@ export async function PUT(request: Request) {
       const temporaryPassword = String(payload.tempPassword ?? "");
       const role = String(payload.role ?? "user") as Role;
       const active = payload.active === false ? 0 : 1;
-      if (name.length < 3 || name.length > 80 || !validUsername(username) || temporaryPassword.length < 8 || temporaryPassword.length > 128 || !["admin","user","treasury"].includes(role)) return Response.json({ error:"Revisa el nombre, usuario, rol y contraseña temporal" }, { status:400 });
+      if (name.length < 3 || name.length > 80 || !validUsername(username) || !validPassword(temporaryPassword) || !["admin","user","treasury"].includes(role)) return Response.json({ error:"La contraseña temporal debe tener al menos 8 caracteres, una minúscula, una mayúscula, un número y un símbolo especial" }, { status:400 });
       const duplicate = await env.DB.prepare("SELECT email FROM members WHERE username = ?").bind(username).first();
       if (duplicate) return Response.json({ error:"Ese nombre de usuario ya está registrado" }, { status:409 });
       const credentials = await hashPassword(temporaryPassword);
@@ -136,7 +136,7 @@ export async function PUT(request: Request) {
       const requestedApproval = String(payload.approvalStatus ?? "");
       const approvalStatus = ["pending", "approved", "suspended"].includes(requestedApproval) ? requestedApproval : active ? "approved" : "suspended";
       if (!(emailPattern(email) || isLocalIdentity(email)) || !name || !["admin", "user", "treasury"].includes(role)) return Response.json({ error: "Datos de usuario inválidos" }, { status: 400 });
-      if (temporaryPassword && (temporaryPassword.length < 8 || temporaryPassword.length > 128)) return Response.json({ error:"La contraseña temporal debe tener al menos 8 caracteres" }, { status:400 });
+      if (temporaryPassword && !validPassword(temporaryPassword)) return Response.json({ error:"La contraseña temporal debe tener al menos 8 caracteres, una minúscula, una mayúscula, un número y un símbolo especial" }, { status:400 });
       if ((originalEmail || email) === actor.email && (email !== actor.email || role !== "admin" || !active)) return Response.json({ error: "No puedes cambiar tu correo, rol o acceso de administrador" }, { status: 400 });
       if (originalEmail) {
         const existing = await env.DB.prepare("SELECT email, name, COALESCE(username, '') AS username, approval_status AS approvalStatus FROM members WHERE email = ?").bind(originalEmail).first<{email:string;name:string;username:string;approvalStatus:string}>();

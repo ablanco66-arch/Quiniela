@@ -100,6 +100,7 @@ export async function deleteSession(request: Request) {
 
 export function normalizeUsername(value: string) { return value.trim().toLowerCase(); }
 export function validUsername(value: string) { return /^[a-z0-9][a-z0-9._-]{3,29}$/.test(value); }
+export function validPassword(value: string) { return value.length >= 8 && value.length <= 128 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value) && /[^A-Za-z0-9]/.test(value); }
 
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
