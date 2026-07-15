@@ -13,7 +13,9 @@ type Square = {
 type Member = { email: string; name: string; role: Role; active: number; username?: string; tempPassword?: string; mustChangePassword?: boolean; approvalStatus?: "pending" | "approved" | "suspended"; authProvider?: "local" | "chatgpt" };
 type Activity = { id: number; squareId: number | null; action: string; actorName: string; actorRole: Role; previousStatus: string; newStatus: string; details: string; createdAt: string };
 type Game = { date: string; visitor: string; home: string };
+type GameResult = { gameId:number; visitorScore:number; homeScore:number; updatedByName?:string; updatedAt?:string };
 type ReportRow = { name:string; reserved:number; paid:number; total:number };
+type WinnerRow = { result:GameResult; game:Game; square:Square; visitorDigit:number; homeDigit:number };
 type SquareReportSortKey = "square"|"visitor"|"home"|"player"|"seller"|"status";
 
 const games: Game[] = [
@@ -50,6 +52,7 @@ export default function Home() {
   const [me, setMe] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [gameResults, setGameResults] = useState<GameResult[]>([]);
   const [accessState, setAccessState] = useState<"loading" | "ready" | "signin" | "denied" | "password">("loading");
   const [accessEmail, setAccessEmail] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,7 +67,7 @@ export default function Home() {
       if (response.status === 403) { setAccessEmail(data.email ?? ""); setAccessState("denied"); return null; }
       if (!response.ok) throw new Error(data.error || "No fue posible cargar el tablero");
       setSquares(data.squares); setVisitorDigits(data.settings.visitorDigits ?? ""); setHomeDigits(data.settings.homeDigits ?? "");
-      setMe(data.me); setMembers(data.members ?? []); setActivity(data.activity ?? []); setAccessState("ready");
+      setMe(data.me); setMembers(data.members ?? []); setActivity(data.activity ?? []); setGameResults(data.gameResults ?? []); setAccessState("ready");
       return data.squares as Square[];
     } catch (error) { setNotice(error instanceof Error ? error.message : "No pudimos conectar con el tablero."); return null; }
   }
@@ -97,6 +100,13 @@ export default function Home() {
     try { await put({ action:"digits", visitorDigits, homeDigits }); setShowDigits(false); setNotice("Números de juego actualizados"); }
     catch (error) { setNotice(error instanceof Error ? error.message : "No se pudieron guardar los números."); }
     finally { setSaving(false); }
+  }
+
+  async function saveGameResult(gameId:number,visitorScore:number,homeScore:number) {
+    setSaving(true);
+    try { const data=await put({action:"game_result",gameId,visitorScore,homeScore});setGameResults((current)=>[...current.filter((result)=>result.gameId!==gameId),data.gameResult].sort((a,b)=>a.gameId-b.gameId));setNotice(`Resultado del juego ${gameId} actualizado`);await loadBoard();return true; }
+    catch(error){setNotice(error instanceof Error?error.message:"No se pudo guardar el resultado.");return false;}
+    finally{setSaving(false);}
   }
 
   async function saveMember(member: Member, originalEmail = "") {
@@ -234,7 +244,7 @@ export default function Home() {
 
     {tab === "games" && <Games />}
     {tab === "rules" && <Rules />}
-    {tab === "reports" && <Reports rows={report} squares={squares} visitorDigits={visitorDigits} homeDigits={homeDigits} activity={activity} me={me!} members={members} saving={saving} generatingFlyer={generatingFlyer} onGenerateFlyer={openReportFlyer} onSaveMember={saveMember} onRemoveMember={removeMember} />}
+    {tab === "reports" && <Reports rows={report} squares={squares} visitorDigits={visitorDigits} homeDigits={homeDigits} gameResults={gameResults} activity={activity} me={me!} members={members} saving={saving} generatingFlyer={generatingFlyer} onGenerateFlyer={openReportFlyer} onSaveMember={saveMember} onRemoveMember={removeMember} onSaveGameResult={saveGameResult} />}
 
     <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
 
@@ -301,14 +311,18 @@ function SquareModal({ square, me, members, saving, boardLocked, visitorDigits, 
   </section></div>;
 }
 
-function Reports({ rows, squares, visitorDigits, homeDigits, activity, me, members, saving, generatingFlyer, onGenerateFlyer, onSaveMember, onRemoveMember }:{ rows:ReportRow[]; squares:Square[]; visitorDigits:string; homeDigits:string; activity:Activity[]; me:Member; members:Member[]; saving:boolean; generatingFlyer:boolean; onGenerateFlyer:()=>void; onSaveMember:(member:Member,originalEmail?:string)=>Promise<boolean>; onRemoveMember:(member:Member)=>Promise<boolean> }) {
-  const [reportView,setReportView] = useState<"summary"|"squares"|"activity"|"access">("summary");
+function Reports({ rows, squares, visitorDigits, homeDigits, gameResults, activity, me, members, saving, generatingFlyer, onGenerateFlyer, onSaveMember, onRemoveMember, onSaveGameResult }:{ rows:ReportRow[]; squares:Square[]; visitorDigits:string; homeDigits:string; gameResults:GameResult[]; activity:Activity[]; me:Member; members:Member[]; saving:boolean; generatingFlyer:boolean; onGenerateFlyer:()=>void; onSaveMember:(member:Member,originalEmail?:string)=>Promise<boolean>; onRemoveMember:(member:Member)=>Promise<boolean>; onSaveGameResult:(gameId:number,visitorScore:number,homeScore:number)=>Promise<boolean> }) {
+  const [reportView,setReportView] = useState<"summary"|"squares"|"winners"|"activity"|"access">("summary");
   const [draft,setDraft] = useState<Member>({email:"",name:"",username:"",tempPassword:"",role:"user",active:1,approvalStatus:"approved"});
   const [editingEmail,setEditingEmail] = useState("");
   const [detailName,setDetailName] = useState("");
   const [detailSort,setDetailSort] = useState<{key:"square"|"visitor";direction:"asc"|"desc"}>({key:"square",direction:"asc"});
   const [squareFilter,setSquareFilter] = useState("all");
   const [squareSort,setSquareSort] = useState<{key:SquareReportSortKey;direction:"asc"|"desc"}>({key:"square",direction:"asc"});
+  const [resultGameId,setResultGameId] = useState(1);
+  const [visitorScore,setVisitorScore] = useState("");
+  const [homeScore,setHomeScore] = useState("");
+  useEffect(()=>{const existing=gameResults.find((result)=>result.gameId===resultGameId);setVisitorScore(existing?String(existing.visitorScore):"");setHomeScore(existing?String(existing.homeScore):"");},[resultGameId,gameResults]);
   const resetMemberForm = () => { setDraft({email:"",name:"",username:"",tempPassword:"",role:"user",active:1,approvalStatus:"approved"}); setEditingEmail(""); };
   const pendingCount = members.filter((member)=>member.approvalStatus==="pending").length;
   const totals = { reserved:rows.reduce((n,row)=>n+row.reserved,0), paid:rows.reduce((n,row)=>n+row.paid,0), total:rows.reduce((n,row)=>n+row.total,0) };
@@ -320,10 +334,14 @@ function Reports({ rows, squares, visitorDigits, homeDigits, activity, me, membe
   const squareReportRows=squares.filter((square)=>square.status!=="available"&&(squareFilter==="all"||squareSeller(square)===squareFilter)).sort((a,b)=>{const av=squareSortValue(a,squareSort.key),bv=squareSortValue(b,squareSort.key),comparison=typeof av==="number"&&typeof bv==="number"?av-bv:String(av).localeCompare(String(bv),"es",{sensitivity:"base"});return (squareSort.direction==="asc"?1:-1)*(comparison||(a.id-b.id));});
   const toggleSquareSort=(key:SquareReportSortKey)=>setSquareSort((current)=>({key,direction:current.key===key&&current.direction==="asc"?"desc":"asc"}));
   const squareSortIcon=(key:SquareReportSortKey)=>squareSort.key===key?(squareSort.direction==="asc"?"▲":"▼"):"↕";
+  const winnerRows:WinnerRow[]=[];
+  if(gameNumbersReady)gameResults.forEach((result)=>{const visitorDigit=result.visitorScore%10,homeDigit=result.homeScore%10,column=visitorDigits.indexOf(String(visitorDigit)),row=homeDigits.indexOf(String(homeDigit)),square=column>=0&&row>=0?squares[row*10+column]:undefined,game=games[result.gameId-1];if(square&&game)winnerRows.push({result,game,square,visitorDigit,homeDigit});});
+  const selectedResultGame=games[resultGameId-1];
   return <section className="content reports-section"><div className="section-heading"><div><p className="kicker">Control y seguimiento</p><h3>Reportes</h3></div><span className="year-pill">{squares.filter((s)=>s.status!=="available").length} vendidas</span></div>
-    <div className="report-switch"><button className={reportView==="summary"?"active":""} onClick={()=>setReportView("summary")}>Sumario por socio</button><button className={reportView==="squares"?"active":""} onClick={()=>setReportView("squares")}>Detalle de casillas</button><button className={reportView==="activity"?"active":""} onClick={()=>setReportView("activity")}>Actividad</button>{me.role==="admin"&&<button className={reportView==="access"?"active":""} onClick={()=>setReportView("access")}>Accesos{pendingCount>0&&<b className="pending-count">{pendingCount}</b>}</button>}</div>
+    <div className="report-switch"><button className={reportView==="summary"?"active":""} onClick={()=>setReportView("summary")}>Sumario por socio</button><button className={reportView==="squares"?"active":""} onClick={()=>setReportView("squares")}>Detalle de casillas</button><button className={reportView==="winners"?"active":""} onClick={()=>setReportView("winners")}>Ganadores</button><button className={reportView==="activity"?"active":""} onClick={()=>setReportView("activity")}>Actividad</button>{me.role==="admin"&&<button className={reportView==="access"?"active":""} onClick={()=>setReportView("access")}>Accesos{pendingCount>0&&<b className="pending-count">{pendingCount}</b>}</button>}</div>
     {reportView === "summary" && <div className="report-card"><div className="report-card-head"><div><h4>Casillas reservadas y pagadas por socio</h4><p>Selecciona el nombre de un socio para consultar el detalle de sus casillas.</p></div><div className="report-head-actions">{me.role==="admin"&&<button className="report-flyer-button" onClick={onGenerateFlyer} disabled={generatingFlyer}>{generatingFlyer?"Generando…":"🏈 Flier de avance"}</button>}<div className="report-value"><strong>${totals.paid*100}</strong><span>cobrado</span></div></div></div><div className="report-table-wrap"><table className="report-table"><thead><tr><th>Socio</th><th>Reservada</th><th>Pagada</th><th>Total</th></tr></thead><tbody>{rows.map((row)=><tr key={row.name}><td><button className="report-member-link" onClick={()=>{setDetailName(row.name);setDetailSort({key:"square",direction:"asc"});}}>{row.name}</button></td><td>{row.reserved || ""}</td><td>{row.paid || ""}</td><td><strong>{row.total}</strong></td></tr>)}</tbody><tfoot><tr><td>Total general</td><td>{totals.reserved}</td><td>{totals.paid}</td><td>{totals.total}</td></tr></tfoot></table></div></div>}
     {reportView === "squares" && <div className="report-card all-squares-card"><div className="report-card-head"><div><h4>Detalle de casillas reservadas y pagadas</h4><p>{squareReportRows.length} registros mostrados · selecciona cualquier encabezado para ordenar.</p></div><label className="square-report-filter">Socio<select value={squareFilter} onChange={(event)=>setSquareFilter(event.target.value)}><option value="all">Todos los socios</option>{rows.map((row)=><option key={row.name} value={row.name}>{row.name}</option>)}</select></label></div><div className="all-squares-wrap"><table className="all-squares-table"><thead><tr>{([['square','Casilla'],['visitor','Visitante'],['home','Casa'],['player','Jugador'],['seller','Socio'],['status','Estado']] as [SquareReportSortKey,string][]).map(([key,label])=><th key={key} aria-sort={squareSort.key===key?(squareSort.direction==="asc"?"ascending":"descending"):"none"}><button onClick={()=>toggleSquareSort(key)}>{label}<span>{squareSortIcon(key)}</span></button></th>)}</tr></thead><tbody>{squareReportRows.map((square)=>{const visitor=gameNumbersReady?visitorDigits[(square.id-1)%10]:"—",home=gameNumbersReady?homeDigits[Math.floor((square.id-1)/10)]:"—",seller=squareSeller(square);return <tr key={square.id}><td><strong>#{square.id}</strong></td><td>{visitor}</td><td>{home}</td><td>{square.participant||"—"}</td><td>{seller||"—"}</td><td><span className={`drilldown-status ${square.status}`}>{labelFor(square.status)}</span></td></tr>;})}</tbody></table></div></div>}
+    {reportView === "winners" && <div className="winners-view">{me.role==="admin"&&<form className="report-card result-entry" onSubmit={async(event)=>{event.preventDefault();await onSaveGameResult(resultGameId,Number(visitorScore),Number(homeScore));}}><div><p className="kicker">Captura administrativa</p><h4>Registrar resultado final</h4><p>Incluye el marcador después de tiempos extras. Puedes seleccionar un juego previamente capturado para corregirlo.</p></div><label>Juego<select value={resultGameId} onChange={(event)=>setResultGameId(Number(event.target.value))}>{games.map((game,index)=><option key={index+1} value={index+1}>{String(index+1).padStart(2,"0")} · {gameDateLabel(index+1)} · {game.visitor} vs {game.home}</option>)}</select></label><div className="score-entry"><label>{selectedResultGame?.visitor||"Visitante"}<input type="number" min="0" max="999" inputMode="numeric" required value={visitorScore} onChange={(event)=>setVisitorScore(event.target.value)}/></label><span>VS</span><label>{selectedResultGame?.home||"Casa"}<input type="number" min="0" max="999" inputMode="numeric" required value={homeScore} onChange={(event)=>setHomeScore(event.target.value)}/></label></div><button className="primary" disabled={saving||visitorScore===""||homeScore===""}>{saving?"Guardando…":"Guardar resultado"}</button></form>}<div className="report-card winners-card"><div className="report-card-head"><div><h4>Casillas ganadoras</h4><p>Se utiliza la unidad del marcador final de visitante y casa, incluidos tiempos extras.</p></div><span className="winner-count">{winnerRows.length} de 17</span></div>{!gameNumbersReady&&gameResults.length>0?<p className="empty-report">Carga los números de juego para poder determinar las casillas ganadoras.</p>:winnerRows.length===0?<p className="empty-report">Los ganadores aparecerán al registrar los resultados finales.</p>:<div className="winners-table-wrap"><table className="winners-table"><thead><tr><th>Fecha del juego</th><th>Casilla</th><th>Estado</th><th>Jugador</th><th>Resultado del juego</th><th>Visitante</th><th>Casa</th><th>Socio</th></tr></thead><tbody>{winnerRows.map(({result,game,square,visitorDigit,homeDigit})=><tr key={result.gameId}><td>{gameDateLabel(result.gameId)}</td><td><strong>#{square.id}</strong></td><td><span className={`drilldown-status ${square.status}`}>{labelFor(square.status)}</span></td><td>{square.participant||"—"}</td><td><span className="final-score"><b>{game.visitor} {result.visitorScore}</b><i>vs</i><b>{game.home} {result.homeScore}</b></span></td><td>{visitorDigit}</td><td>{homeDigit}</td><td>{square.reservedByName||square.contact||"—"}</td></tr>)}</tbody></table></div>}</div></div>}
     {reportView === "activity" && <div className="report-card"><div className="report-card-head"><div><h4>Actividad reciente</h4><p>Quién reservó, cobró o modificó cada casilla.</p></div></div><div className="activity-list">{activity.length ? activity.map((item)=><article key={item.id}><span className={`activity-icon ${item.action}`}>{activityIcon(item.action)}</span><div><strong>{item.actorName}</strong><p>{activityText(item)}</p><small>{formatDate(item.createdAt)} · {roleLabel(item.actorRole)}</small></div>{item.squareId&&<b>#{item.squareId}</b>}</article>) : <p className="empty-report">La actividad nueva aparecerá aquí.</p>}</div></div>}
     {reportView === "access" && <div className="access-management"><div className="member-form report-card"><div className="report-card-head"><div><h4>{editingEmail ? "Editar acceso" : "Crear cuenta propia"}</h4><p>{draft.approvalStatus==="pending"?"Revisa la solicitud, asigna el nivel y aprueba al nuevo usuario.":editingEmail?"Actualiza el nivel, estado o asigna una nueva contraseña temporal.":"Crea el usuario y comparte la contraseña temporal de forma privada."}</p></div>{editingEmail && <button className="form-cancel" onClick={resetMemberForm}>Cancelar</button>}</div><div className="member-form-grid">
       <label>Nombre<input value={draft.name} onChange={(e)=>setDraft({...draft,name:e.target.value})} placeholder="Nombre del socio"/></label>
@@ -427,7 +445,8 @@ function roleHelp(role:Role,boardLocked=false){ if(role==="admin")return "Puedes
 function initials(name:string){ return name.split(/\s+/).filter(Boolean).slice(0,2).map((part)=>part[0]).join("").toUpperCase(); }
 function cleanDigits(value:string){ return value.replace(/\D/g,"").slice(0,10); }
 function isDigitSet(value:string){ return value.length===10&&new Set(value).size===10&&[...value].every((digit)=>"0123456789".includes(digit)); }
+function gameDateLabel(gameId:number){const game=games[gameId-1];return game?`${game.date} ${gameId===17?"2027":"2026"}`:"";}
 function passwordMeetsPolicy(value:string){ return value.length>=8&&value.length<=128&&/[a-z]/.test(value)&&/[A-Z]/.test(value)&&/[0-9]/.test(value)&&/[^A-Za-z0-9]/.test(value); }
-function activityIcon(action:string){ return action==="paid"?"$":action==="reserved"?"R":action==="released"?"↺":"·"; }
-function activityText(item:Activity){ if(item.action==="paid")return `marcó como pagada la casilla ${item.squareId}`;if(item.action==="reserved")return `reservó la casilla ${item.squareId} para ${item.details}`;if(item.action==="released")return `liberó la casilla ${item.squareId}`;if(item.action==="member_updated")return `actualizó el acceso de ${item.details}`;if(item.action==="member_removed")return `retiró el acceso de ${item.details}`;if(item.action==="numbers_updated")return "actualizó los números de juego";return `actualizó la casilla ${item.squareId}`; }
+function activityIcon(action:string){ return action==="paid"?"$":action==="reserved"?"R":action==="released"?"↺":action==="game_result_updated"?"J":"·"; }
+function activityText(item:Activity){ if(item.action==="paid")return `marcó como pagada la casilla ${item.squareId}`;if(item.action==="reserved")return `reservó la casilla ${item.squareId} para ${item.details}`;if(item.action==="released")return `liberó la casilla ${item.squareId}`;if(item.action==="member_updated")return `actualizó el acceso de ${item.details}`;if(item.action==="member_removed")return `retiró el acceso de ${item.details}`;if(item.action==="numbers_updated")return "actualizó los números de juego";if(item.action==="game_result_updated")return `registró el resultado: ${item.details}`;return `actualizó la casilla ${item.squareId}`; }
 function formatDate(value:string){ try{return new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}catch{return value;} }

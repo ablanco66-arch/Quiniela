@@ -21,6 +21,7 @@ async function ensureDatabase() {
     db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, square_id INTEGER, action TEXT NOT NULL, actor_email TEXT NOT NULL, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, previous_status TEXT NOT NULL DEFAULT '', new_status TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS activity_created_at_idx ON activity (created_at DESC)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS game_results (game_id INTEGER PRIMARY KEY, visitor_score INTEGER NOT NULL, home_score INTEGER NOT NULL, updated_by_email TEXT NOT NULL DEFAULT '', updated_by_name TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
   ]);
   await db.prepare("INSERT OR IGNORE INTO members (email, name, role, active) VALUES (?, ?, 'admin', 1)").bind(INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_NAME).run();
 
@@ -74,13 +75,14 @@ export async function GET(request: Request) {
   try {
     const actor = await getActor(request);
     if (actor instanceof Response) return actor;
-    const [squareResult, settings, memberResult, activityResult] = await Promise.all([
+    const [squareResult, settings, memberResult, activityResult, gameResult] = await Promise.all([
       env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares ORDER BY id`).all(),
       env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first(),
       actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
       env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY id DESC LIMIT 60").all(),
+      env.DB.prepare("SELECT game_id AS gameId, visitor_score AS visitorScore, home_score AS homeScore, updated_by_name AS updatedByName, updated_at AS updatedAt FROM game_results ORDER BY game_id").all(),
     ]);
-    return Response.json({ squares: squareResult.results, settings, me: actor, members: memberResult.results, activity: activityResult.results });
+    return Response.json({ squares: squareResult.results, settings, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "No fue posible cargar el tablero" }, { status: 500 });
   }
@@ -102,6 +104,19 @@ export async function PUT(request: Request) {
         activity(actor, null, "numbers_updated", "", "", "Números de juego actualizados"),
       ]);
       return Response.json({ settings: { visitorDigits, homeDigits } });
+    }
+
+    if (payload.action === "game_result") {
+      if (actor.role !== "admin") return forbidden();
+      const gameId = Number(payload.gameId), visitorScore = Number(payload.visitorScore), homeScore = Number(payload.homeScore);
+      if (!Number.isInteger(gameId) || gameId < 1 || gameId > 17 || !Number.isInteger(visitorScore) || visitorScore < 0 || visitorScore > 999 || !Number.isInteger(homeScore) || homeScore < 0 || homeScore > 999) return Response.json({ error:"Resultado de juego inválido" }, { status:400 });
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO game_results (game_id, visitor_score, home_score, updated_by_email, updated_by_name, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(game_id) DO UPDATE SET visitor_score = excluded.visitor_score, home_score = excluded.home_score, updated_by_email = excluded.updated_by_email, updated_by_name = excluded.updated_by_name, updated_at = CURRENT_TIMESTAMP`).bind(gameId, visitorScore, homeScore, actor.email, actor.name),
+        activity(actor, null, "game_result_updated", "", "", `Juego ${gameId}: ${visitorScore}-${homeScore}`),
+      ]);
+      const gameResult = await env.DB.prepare("SELECT game_id AS gameId, visitor_score AS visitorScore, home_score AS homeScore, updated_by_name AS updatedByName, updated_at AS updatedAt FROM game_results WHERE game_id = ?").bind(gameId).first();
+      return Response.json({ gameResult });
     }
 
     if (payload.action === "member_create_local") {

@@ -58,3 +58,12 @@ export const activity = sqliteTable("activity", {
   details: text("details").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("activity_created_at_idx").on(table.createdAt)]);
+
+export const gameResults = sqliteTable("game_results", {
+  gameId: integer("game_id").primaryKey(),
+  visitorScore: integer("visitor_score").notNull(),
+  homeScore: integer("home_score").notNull(),
+  updatedByEmail: text("updated_by_email").notNull().default(""),
+  updatedByName: text("updated_by_name").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
