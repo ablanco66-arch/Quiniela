@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Archivo, Archivo_Black, Graduate } from "next/font/google";
+import { Archivo, Archivo_Black, Bowlby_One_SC } from "next/font/google";
 import "./globals.css";
 
 const archivo = Archivo({ variable: "--font-body", subsets: ["latin"] });
 const archivoBlack = Archivo_Black({ variable: "--font-display", weight: "400", subsets: ["latin"] });
-const graduate = Graduate({ variable: "--font-sport", weight: "400", subsets: ["latin"] });
+const sportClassic = Bowlby_One_SC({ variable: "--font-sport", weight: "400", subsets: ["latin"] });
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -21,5 +21,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body className={`${archivo.variable} ${archivoBlack.variable} ${graduate.variable}`}>{children}</body></html>;
+  return <html lang="es"><body className={`${archivo.variable} ${archivoBlack.variable} ${sportClassic.variable}`}>{children}</body></html>;
 }
