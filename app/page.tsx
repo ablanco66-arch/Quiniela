@@ -432,19 +432,19 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es") {
   const english=language==="en";
   const copy=english?{
     name:"MNF FOOTBALL POOL 2026",headline:"PLAY. WIN. GIVE BACK.",intro:"Pick a square and turn every Monday into support for a great cause.",offer:"$100 USD PER SQUARE   •   $300 USD PER GAME   •   17 GAMES",
-    legend:["AVAILABLE","RESERVED","PAID"],rulesTitle:"HOW TO PLAY",rules:["$100 USD per square. Payment in full by September 14, 2026.","$300 USD for each participating game; 17 chances to win.","Numbers are drawn at the start of the season and remain hidden until then.","Final score counts, including overtime; use the last digit for each team."],
+    legend:["AVAILABLE","RESERVED","PAID"],rulesTitle:"CLEAR RULES, BIG FUN!",rules:["$100 USD per square. Payment in full by September 14, 2026.","$300 USD for each participating game; 17 chances to win.","Numbers are drawn at the start of the season and remain hidden until then.","Final score counts, including overtime; use the last digit for each team."],exampleTitle:"EXAMPLE · FINAL SCORE",exampleCopy:"Visitor 17 and Home 10: the winning square is where column 7 crosses row 0.",
     warning:"UNPAID SQUARES DO NOT PLAY  •  IF AN UNSOLD SQUARE WINS, THE CLUB KEEPS THE PRIZE  •  LISTED GAMES ONLY",cta:"JOIN TODAY AND SUPPORT PROJECTS THAT CHANGE LIVES!"
   }:{
     name:"QUINIELA MNF 2026",headline:"JUEGA. GANA. AYUDA.",intro:"Aparta una casilla y transforma cada lunes en una buena causa.",offer:"$100 USD POR CASILLA   •   $300 USD POR JUEGO   •   17 JUEGOS",
-    legend:["DISPONIBLE","RESERVADA","PAGADA"],rulesTitle:"REGLAS DEL JUEGO",rules:["$100 USD por casilla. Pago total antes del 14 de septiembre de 2026.","$300 USD por cada juego participante; tienes 17 oportunidades de ganar.","Los números se sortean al inicio de temporada y permanecen ocultos hasta entonces.","Cuenta el marcador final, incluidos tiempos extra, usando la unidad de cada equipo."],
+    legend:["DISPONIBLE","RESERVADA","PAGADA"],rulesTitle:"¡REGLAS CLARAS, DIVERSIÓN GRANDE!",rules:["$100 USD por casilla. Pago total antes del 14 de septiembre de 2026.","$300 USD por cada juego participante; tienes 17 oportunidades de ganar.","Los números se sortean al inicio de temporada y permanecen ocultos hasta entonces.","Cuenta el marcador final, incluidos tiempos extra, usando la unidad de cada equipo."],exampleTitle:"EJEMPLO · MARCADOR FINAL",exampleCopy:"Visitante 17 y Casa 10: gana la casilla donde la columna 7 cruza con el renglón 0.",
     warning:"NO PAGADAS NO JUEGAN  •  SI GANA UNA NO VENDIDA, EL PREMIO QUEDA EN EL CLUB  •  SOLO JUEGOS LISTADOS",cta:"¡PARTICIPA HOY Y APOYA PROYECTOS QUE CAMBIAN VIDAS!"
   };
-  const stadium = await loadCanvasImage("/flyer-stadium-bg.png"); ctx.drawImage(stadium,0,0,1080,1920);
+  const [stadium,logo,mnfLogo] = await Promise.all([loadCanvasImage("/flyer-stadium-bg.png"),loadCanvasImage("/logo-crjc-white-gold.png"),loadCanvasImage("/logo-monday-night-football.png")]); ctx.drawImage(stadium,0,0,1080,1920);
   const shade=ctx.createLinearGradient(0,0,0,1920);shade.addColorStop(0,"#020a1dcc");shade.addColorStop(.46,"#061b3e99");shade.addColorStop(.78,"#031128b8");shade.addColorStop(1,"#02091866");ctx.fillStyle=shade;ctx.fillRect(0,0,1080,1920);
   ctx.save(); ctx.globalAlpha=.09; ctx.strokeStyle=gold; ctx.lineWidth=2; for(let y=34;y<780;y+=92){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1080,y);ctx.stroke();} ctx.restore();
   ctx.fillStyle=gold; ctx.fillRect(0,0,1080,14); ctx.fillRect(0,1906,1080,14);
 
-  const logo = await loadCanvasImage("/logo-crjc-white-gold.png"); const logoW=480, logoH=logoW*(logo.height/logo.width); ctx.drawImage(logo,(1080-logoW)/2,34,logoW,logoH);
+  const logoW=420, logoH=logoW*(logo.height/logo.width); ctx.drawImage(logo,62,34,logoW,logoH);const mnfW=178,mnfH=mnfW*(mnfLogo.height/mnfLogo.width);ctx.drawImage(mnfLogo,840,28,mnfW,mnfH);
   ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font=`400 30px ${displayFont}`; ctx.fillText(copy.name,540,305);
   ctx.fillStyle=white; ctx.font=`400 72px ${displayFont}`; ctx.fillText(copy.headline,540,382);
   ctx.fillStyle=cream; ctx.font=`600 29px ${bodyFont}`; ctx.fillText(copy.intro,540,430);
@@ -454,14 +454,15 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es") {
   const legend=[{label:copy.legend[0],color:cream,text:navy},{label:copy.legend[1],color:gold,text:navy},{label:copy.legend[2],color:green,text:white}];
   ctx.textAlign="left"; legend.forEach((item,index)=>{const lx=154+index*285;ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font=`400 22px ${displayFont}`;ctx.fillText(item.label,lx+34,596);});
 
-  const gridX=90, gridY=625, cell=84, gap=6;
-  roundedBox(ctx,68,603,944,944,26,"#03112be8",gold,4);
+  const gridX=148, gridY=625, cell=74, gap=5;
+  roundedBox(ctx,126,603,828,834,26,"#03112be8",gold,4);
   squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`400 29px ${displayFont}`;ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
 
-  ctx.textAlign="left"; ctx.fillStyle=gold; ctx.font=`400 32px ${displayFont}`; ctx.fillText(copy.rulesTitle,82,1592);
+  ctx.textAlign="left"; ctx.fillStyle=gold;canvasFontToFit(ctx,copy.rulesTitle,916,30,displayFont,22);ctx.fillText(copy.rulesTitle,82,1482);
   const rules=copy.rules.map((text,index)=>[String(index+1),text]);
-  rules.forEach(([number,text],index)=>{const y=1632+index*54;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,y-8,20,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font=`400 22px ${displayFont}`;ctx.fillText(number,100,y);ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`600 20px ${bodyFont}`;drawWrappedText(ctx,text,136,y,820,23);});
-  ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font=`800 15px ${bodyFont}`;ctx.fillText(copy.warning,540,1842);
+  rules.forEach(([number,text],index)=>{const y=1522+index*42;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,y-7,16,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font=`400 17px ${displayFont}`;ctx.fillText(number,100,y-1);ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`600 17px ${bodyFont}`;drawWrappedText(ctx,text,130,y,840,19);});
+  roundedBox(ctx,70,1680,940,126,20,"#071a3be8",gold,2);ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 18px ${displayFont}`;ctx.fillText(copy.exampleTitle,540,1708);ctx.fillStyle="#aebed3";ctx.font=`800 12px ${bodyFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",220,1742);ctx.fillText(english?"HOME":"CASA",860,1742);ctx.fillStyle=white;ctx.font=`400 38px ${displayFont}`;ctx.fillText("17",220,1777);ctx.fillText("10",860,1777);roundedBox(ctx,420,1726,240,55,12,gold,null,0);ctx.fillStyle=navy;ctx.font=`400 30px ${displayFont}`;ctx.fillText("7 × 0",540,1764);ctx.fillStyle=white;ctx.font=`600 15px ${bodyFont}`;ctx.fillText(copy.exampleCopy,540,1796);
+  ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font=`800 15px ${bodyFont}`;ctx.fillText(copy.warning,540,1838);
   roundedBox(ctx,70,1860,940,42,13,gold,null,0); ctx.fillStyle=navy; ctx.textAlign="center"; ctx.font=`400 24px ${displayFont}`; ctx.fillText(copy.cta,540,1889);
   const blob = await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));
   return { blob, url:canvas.toDataURL("image/png") };
