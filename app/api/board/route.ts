@@ -6,7 +6,7 @@ type Role = "admin" | "user" | "treasury";
 type SeedSquare = { id: number; status: "reserved" | "paid"; participant: string; contact: string };
 type Actor = { email: string; name: string; role: Role; authProvider: "local" | "chatgpt" };
 type Game = { date: string; visitor: string; home: string };
-type SeasonConfig = { name: string; squarePrice: number; gamePrize: number; games: Game[] };
+type SeasonConfig = { name: string; squarePrice: number; gamePrize: number; paymentDeadline: string; games: Game[] };
 const INITIAL_ADMIN_EMAIL = "ablanco66@gmail.com";
 const INITIAL_ADMIN_NAME = "Andrés Blanco";
 const MEMBER_LIST_SQL = "SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus, must_change_password AS mustChangePassword FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email";
@@ -31,11 +31,11 @@ async function ensureDatabase() {
   await ensureLocalAuthSchema();
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS squares (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'available', participant TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', reserved_by_email TEXT NOT NULL DEFAULT '', reserved_by_name TEXT NOT NULL DEFAULT '', reserved_at TEXT NOT NULL DEFAULT '', paid_by_email TEXT NOT NULL DEFAULT '', paid_by_name TEXT NOT NULL DEFAULT '', paid_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', season_name TEXT NOT NULL DEFAULT '2026', square_price INTEGER NOT NULL DEFAULT 100, game_prize INTEGER NOT NULL DEFAULT 300, games_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', season_name TEXT NOT NULL DEFAULT '2026', square_price INTEGER NOT NULL DEFAULT 100, game_prize INTEGER NOT NULL DEFAULT 300, payment_deadline TEXT NOT NULL DEFAULT '2026-09-14', games_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, square_id INTEGER, action TEXT NOT NULL, actor_email TEXT NOT NULL, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, previous_status TEXT NOT NULL DEFAULT '', new_status TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS activity_created_at_idx ON activity (created_at DESC)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS game_results (game_id INTEGER PRIMARY KEY, visitor_score INTEGER NOT NULL, home_score INTEGER NOT NULL, updated_by_email TEXT NOT NULL DEFAULT '', updated_by_name TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS season_archives (id INTEGER PRIMARY KEY AUTOINCREMENT, season_name TEXT NOT NULL, square_price INTEGER NOT NULL, game_prize INTEGER NOT NULL, games_json TEXT NOT NULL, squares_json TEXT NOT NULL, results_json TEXT NOT NULL, visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS season_archives (id INTEGER PRIMARY KEY AUTOINCREMENT, season_name TEXT NOT NULL, square_price INTEGER NOT NULL, game_prize INTEGER NOT NULL, payment_deadline TEXT NOT NULL DEFAULT '', games_json TEXT NOT NULL, squares_json TEXT NOT NULL, results_json TEXT NOT NULL, visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS season_archives_archived_at_idx ON season_archives (archived_at DESC)`),
   ]);
   await db.prepare("INSERT OR IGNORE INTO members (email, name, role, active) VALUES (?, ?, 'admin', 1)").bind(INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_NAME).run();
@@ -58,6 +58,7 @@ async function ensureDatabase() {
     ["season_name", "ALTER TABLE settings ADD COLUMN season_name TEXT NOT NULL DEFAULT '2026'"],
     ["square_price", "ALTER TABLE settings ADD COLUMN square_price INTEGER NOT NULL DEFAULT 100"],
     ["game_prize", "ALTER TABLE settings ADD COLUMN game_prize INTEGER NOT NULL DEFAULT 300"],
+    ["payment_deadline", "ALTER TABLE settings ADD COLUMN payment_deadline TEXT NOT NULL DEFAULT '2026-09-14'"],
     ["games_json", "ALTER TABLE settings ADD COLUMN games_json TEXT NOT NULL DEFAULT '[]'"],
   ].filter(([name]) => !settingsColumns.has(name));
   if (settingsAdditions.length) await db.batch(settingsAdditions.map(([, sql]) => db.prepare(sql)));
@@ -103,14 +104,14 @@ export async function GET(request: Request) {
     if (actor instanceof Response) return actor;
     const [squareResult, settings, memberResult, activityResult, gameResult, archiveResult] = await Promise.all([
       env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares ORDER BY id`).all(),
-      env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>(),
+      env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, payment_deadline AS paymentDeadline, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>(),
       actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
       actor.role === "admin" ? env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY id DESC LIMIT 60").all() : Promise.resolve({ results: [] }),
       env.DB.prepare("SELECT game_id AS gameId, visitor_score AS visitorScore, home_score AS homeScore, updated_by_name AS updatedByName, updated_at AS updatedAt FROM game_results ORDER BY game_id").all(),
       actor.role === "admin" ? env.DB.prepare("SELECT id, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, games_json AS gamesJson, archived_at AS archivedAt FROM season_archives ORDER BY id DESC LIMIT 12").all() : Promise.resolve({ results: [] }),
     ]);
     const games = parseGames(String(settings?.gamesJson ?? ""));
-    const season = { name:String(settings?.seasonName ?? "2026"), squarePrice:Number(settings?.squarePrice ?? 100), gamePrize:Number(settings?.gamePrize ?? 300), games };
+    const season = { name:String(settings?.seasonName ?? "2026"), squarePrice:Number(settings?.squarePrice ?? 100), gamePrize:Number(settings?.gamePrize ?? 300), paymentDeadline:String(settings?.paymentDeadline ?? "2026-09-14"), games };
     const archives = (archiveResult.results as Array<Record<string, unknown>>).map((item) => ({ id:item.id, seasonName:item.seasonName, squarePrice:item.squarePrice, gamePrize:item.gamePrize, archivedAt:item.archivedAt, gameCount:parseGames(String(item.gamesJson ?? "")).length }));
     return Response.json({ squares: squareResult.results, settings:{ visitorDigits:settings?.visitorDigits ?? "", homeDigits:settings?.homeDigits ?? "" }, season, archives, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
   } catch (error) {
@@ -130,22 +131,22 @@ export async function PUT(request: Request) {
       if (!season) return Response.json({ error:"Completa el nombre de temporada, costo, premio y todos los datos de los juegos" }, { status:400 });
       if (payload.action === "season_save") {
         await env.DB.batch([
-          env.DB.prepare("UPDATE settings SET season_name = ?, square_price = ?, game_prize = ?, games_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1").bind(season.name, season.squarePrice, season.gamePrize, JSON.stringify(season.games)),
+          env.DB.prepare("UPDATE settings SET season_name = ?, square_price = ?, game_prize = ?, payment_deadline = ?, games_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1").bind(season.name, season.squarePrice, season.gamePrize, season.paymentDeadline, JSON.stringify(season.games)),
           activity(actor, null, "season_updated", "", "", `${season.name} · ${season.games.length} juegos`),
         ]);
         return Response.json({ season });
       }
-      const current = await env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>();
+      const current = await env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, payment_deadline AS paymentDeadline, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>();
       if (String(payload.confirmSeasonName ?? "") !== String(current?.seasonName ?? "")) return Response.json({ error:"Confirma la temporada actual antes de iniciar una nueva" }, { status:400 });
       const [squareSnapshot, resultSnapshot] = await Promise.all([
         env.DB.prepare("SELECT * FROM squares ORDER BY id").all(),
         env.DB.prepare("SELECT * FROM game_results ORDER BY game_id").all(),
       ]);
       await env.DB.batch([
-        env.DB.prepare("INSERT INTO season_archives (season_name, square_price, game_prize, games_json, squares_json, results_json, visitor_digits, home_digits) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(String(current?.seasonName ?? ""), Number(current?.squarePrice ?? 100), Number(current?.gamePrize ?? 300), JSON.stringify(parseGames(String(current?.gamesJson ?? ""))), JSON.stringify(squareSnapshot.results), JSON.stringify(resultSnapshot.results), String(current?.visitorDigits ?? ""), String(current?.homeDigits ?? "")),
+        env.DB.prepare("INSERT INTO season_archives (season_name, square_price, game_prize, payment_deadline, games_json, squares_json, results_json, visitor_digits, home_digits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(String(current?.seasonName ?? ""), Number(current?.squarePrice ?? 100), Number(current?.gamePrize ?? 300), String(current?.paymentDeadline ?? ""), JSON.stringify(parseGames(String(current?.gamesJson ?? ""))), JSON.stringify(squareSnapshot.results), JSON.stringify(resultSnapshot.results), String(current?.visitorDigits ?? ""), String(current?.homeDigits ?? "")),
         env.DB.prepare("UPDATE squares SET status = 'available', participant = '', contact = '', phone = '', reserved_by_email = '', reserved_by_name = '', reserved_at = '', paid_by_email = '', paid_by_name = '', paid_at = '', updated_at = CURRENT_TIMESTAMP"),
         env.DB.prepare("DELETE FROM game_results"),
-        env.DB.prepare("UPDATE settings SET visitor_digits = '', home_digits = '', season_name = ?, square_price = ?, game_prize = ?, games_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1").bind(season.name, season.squarePrice, season.gamePrize, JSON.stringify(season.games)),
+        env.DB.prepare("UPDATE settings SET visitor_digits = '', home_digits = '', season_name = ?, square_price = ?, game_prize = ?, payment_deadline = ?, games_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1").bind(season.name, season.squarePrice, season.gamePrize, season.paymentDeadline, JSON.stringify(season.games)),
         activity(actor, null, "season_activated", String(current?.seasonName ?? ""), season.name, `${season.games.length} juegos · tablero reiniciado`),
       ]);
       return Response.json({ season, activated:true });
@@ -370,10 +371,10 @@ function roleLabel(role: Role) { return role === "admin" ? "Administrador" : rol
 function parseGames(value:string):Game[] { try { const parsed=JSON.parse(value); return Array.isArray(parsed)&&parsed.length ? parsed : DEFAULT_GAMES; } catch { return DEFAULT_GAMES; } }
 function validateSeason(value:unknown):SeasonConfig|null {
   if (!value || typeof value !== "object") return null;
-  const source=value as Record<string, unknown>, name=String(source.name??"").trim(), squarePrice=Number(source.squarePrice), gamePrize=Number(source.gamePrize), rawGames=source.games;
-  if (name.length<2||name.length>24||!Number.isInteger(squarePrice)||squarePrice<1||squarePrice>100000||!Number.isInteger(gamePrize)||gamePrize<1||gamePrize>1000000||!Array.isArray(rawGames)||rawGames.length<1||rawGames.length>25) return null;
+  const source=value as Record<string, unknown>, name=String(source.name??"").trim(), squarePrice=Number(source.squarePrice), gamePrize=Number(source.gamePrize), paymentDeadline=String(source.paymentDeadline??"").trim(), rawGames=source.games;
+  if (name.length<2||name.length>24||!Number.isInteger(squarePrice)||squarePrice<1||squarePrice>100000||!Number.isInteger(gamePrize)||gamePrize<1||gamePrize>1000000||(paymentDeadline!==""&&!/^\d{4}-\d{2}-\d{2}$/.test(paymentDeadline))||!Array.isArray(rawGames)||rawGames.length<1||rawGames.length>25) return null;
   const games=rawGames.map((item)=>{const game=item as Record<string,unknown>;return{date:String(game?.date??"").trim(),visitor:String(game?.visitor??"").trim(),home:String(game?.home??"").trim()};});
   if (games.some((game)=>!game.date||!game.visitor||!game.home||game.date.length>30||game.visitor.length>80||game.home.length>80)) return null;
-  return {name,squarePrice,gamePrize,games};
+  return {name,squarePrice,gamePrize,paymentDeadline,games};
 }
 async function currentGameCount(){const row=await env.DB.prepare("SELECT games_json AS gamesJson FROM settings WHERE id = 1").first<{gamesJson:string}>();return parseGames(row?.gamesJson??"").length;}

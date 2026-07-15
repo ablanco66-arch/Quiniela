@@ -23,6 +23,7 @@ export const settings = sqliteTable("settings", {
   seasonName: text("season_name").notNull().default("2026"),
   squarePrice: integer("square_price").notNull().default(100),
   gamePrize: integer("game_prize").notNull().default(300),
+  paymentDeadline: text("payment_deadline").notNull().default("2026-09-14"),
   gamesJson: text("games_json").notNull().default("[]"),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -32,6 +33,7 @@ export const seasonArchives = sqliteTable("season_archives", {
   seasonName: text("season_name").notNull(),
   squarePrice: integer("square_price").notNull(),
   gamePrize: integer("game_prize").notNull(),
+  paymentDeadline: text("payment_deadline").notNull().default(""),
   gamesJson: text("games_json").notNull(),
   squaresJson: text("squares_json").notNull(),
   resultsJson: text("results_json").notNull(),
