@@ -20,8 +20,25 @@ export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   visitorDigits: text("visitor_digits").notNull().default(""),
   homeDigits: text("home_digits").notNull().default(""),
+  seasonName: text("season_name").notNull().default("2026"),
+  squarePrice: integer("square_price").notNull().default(100),
+  gamePrize: integer("game_prize").notNull().default(300),
+  gamesJson: text("games_json").notNull().default("[]"),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const seasonArchives = sqliteTable("season_archives", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  seasonName: text("season_name").notNull(),
+  squarePrice: integer("square_price").notNull(),
+  gamePrize: integer("game_prize").notNull(),
+  gamesJson: text("games_json").notNull(),
+  squaresJson: text("squares_json").notNull(),
+  resultsJson: text("results_json").notNull(),
+  visitorDigits: text("visitor_digits").notNull().default(""),
+  homeDigits: text("home_digits").notNull().default(""),
+  archivedAt: text("archived_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("season_archives_archived_at_idx").on(table.archivedAt)]);
 
 export const members = sqliteTable("members", {
   email: text("email").primaryKey(),

@@ -5,9 +5,22 @@ import { ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, 
 type Role = "admin" | "user" | "treasury";
 type SeedSquare = { id: number; status: "reserved" | "paid"; participant: string; contact: string };
 type Actor = { email: string; name: string; role: Role; authProvider: "local" | "chatgpt" };
+type Game = { date: string; visitor: string; home: string };
+type SeasonConfig = { name: string; squarePrice: number; gamePrize: number; games: Game[] };
 const INITIAL_ADMIN_EMAIL = "ablanco66@gmail.com";
 const INITIAL_ADMIN_NAME = "Andrés Blanco";
 const MEMBER_LIST_SQL = "SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus, must_change_password AS mustChangePassword FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email";
+const DEFAULT_GAMES: Game[] = [
+  { date:"14 sep", visitor:"Denver Broncos", home:"Kansas City Chiefs" }, { date:"21 sep", visitor:"New York Giants", home:"Los Angeles Rams" },
+  { date:"28 sep", visitor:"Philadelphia Eagles", home:"Chicago Bears" }, { date:"5 oct", visitor:"Atlanta Falcons", home:"New Orleans Saints" },
+  { date:"12 oct", visitor:"Buffalo Bills", home:"Los Angeles Rams" }, { date:"19 oct", visitor:"Washington Commanders", home:"San Francisco 49ers" },
+  { date:"26 oct", visitor:"Dallas Cowboys", home:"Philadelphia Eagles" }, { date:"2 nov", visitor:"Chicago Bears", home:"Seattle Seahawks" },
+  { date:"9 nov", visitor:"Buffalo Bills", home:"Minnesota Vikings" }, { date:"16 nov", visitor:"Los Angeles Chargers", home:"Baltimore Ravens" },
+  { date:"23 nov", visitor:"Cincinnati Bengals", home:"Washington Commanders" }, { date:"30 nov", visitor:"Carolina Panthers", home:"Tampa Bay Buccaneers" },
+  { date:"7 dic", visitor:"Dallas Cowboys", home:"Seattle Seahawks" }, { date:"14 dic", visitor:"Pittsburgh Steelers", home:"Jacksonville Jaguars" },
+  { date:"21 dic", visitor:"New England Patriots", home:"Kansas City Chiefs" }, { date:"28 dic", visitor:"New York Giants", home:"Detroit Lions" },
+  { date:"4 ene", visitor:"Houston Texans", home:"Green Bay Packers" },
+];
 
 const occupied: SeedSquare[] = [
   [4,"reserved","Cabiria Flores","Cabi Flores"],[5,"reserved","Eduardo Cinco","Yamel Guillén"],[6,"reserved","Jaime Chávez","Mario Blanco"],[7,"reserved","Jay Marcel","Gabriel Barbosa"],[9,"reserved","María Xóchitl Sánchez","María Xóchitl Sánchez"],[11,"reserved","Rubén de Santiago","Yamel Guillén"],[13,"reserved","Omar Apodaca","Yamel Guillén"],[16,"reserved","Daniel de la Rosa","Angie de la Rosa"],[17,"reserved","Rosa Ávila","Angie de la Rosa"],[18,"paid","José Calderón","Darío Sánchez"],[21,"reserved","Roberto Martínez","Angie de la Rosa"],[22,"paid","Rosa Ma. Espinoza","Mario Blanco"],[24,"reserved","Manolo Papadakis","Mario Blanco"],[25,"reserved","Efrén Páramo","Myrna Sandoval"],[26,"reserved","Irma de Alvarado","Mario Blanco · CR Cd. Juárez"],[29,"reserved","Juan Carlos Márquez","Darío Sánchez"],[30,"reserved","Roberto de la Rosa","Angie de la Rosa"],[33,"reserved","Felipe Meza","Mario Blanco · CRJ Ejecutivo"],[34,"reserved","Javo Murguía","Mario Blanco"],[35,"reserved","Javier Guillén","Yamel Guillén"],[37,"reserved","Edith Manríquez","Edith Manríquez"],[40,"paid","Alejandro Arrieta","Darío Sánchez"],[43,"reserved","Juan Carlos Olivares","JC Olivares"],[44,"reserved","Nidia de la Rosa","Angie de la Rosa"],[45,"reserved","Jesús Cansino","Yamel Guillén"],[47,"reserved","Charly Coutiño","Myrna Sandoval"],[48,"paid","Rosa Ma. Espinoza","Glafira Manríquez"],[50,"reserved","Marty Class","Edith Manríquez"],[54,"reserved","Enrique Luján","Mario Blanco"],[55,"reserved","Richy Cabada","Angie de la Rosa"],[57,"reserved","Cindy Holguín","Darío Sánchez"],[58,"reserved","Daniel Martínez","Mario Blanco · CRJ Siglo XXI"],[64,"reserved","Guillermo Huerta","Glafira Manríquez · CRJ S. XXI"],[65,"reserved","Laura de la Rosa","Angie de la Rosa"],[66,"reserved","Felipe Meza","Mario Blanco · CRJ Ejecutivo"],[67,"reserved","Jay Marcel","Gabriel Barbosa"],[72,"reserved","Jimmy Holguín","Mario Blanco · CR Cd. Juárez"],[76,"paid","Andrés Blanco","Glafira Manríquez"],[85,"paid","Teófilo Ugalde","Mario Blanco"],[90,"reserved","David Jiménez","Angie de la Rosa"],[96,"paid","Adriana Galván","Edith Manríquez"],[98,"paid","Andrés Blanco","Mario Blanco"],[99,"reserved","Andrés Iglesias","Mario Blanco"],[100,"reserved","Betzabel Tobías","Betzabel Tobías"],
@@ -18,10 +31,12 @@ async function ensureDatabase() {
   await ensureLocalAuthSchema();
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS squares (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'available', participant TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', reserved_by_email TEXT NOT NULL DEFAULT '', reserved_by_name TEXT NOT NULL DEFAULT '', reserved_at TEXT NOT NULL DEFAULT '', paid_by_email TEXT NOT NULL DEFAULT '', paid_by_name TEXT NOT NULL DEFAULT '', paid_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
-    db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', season_name TEXT NOT NULL DEFAULT '2026', square_price INTEGER NOT NULL DEFAULT 100, game_prize INTEGER NOT NULL DEFAULT 300, games_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, square_id INTEGER, action TEXT NOT NULL, actor_email TEXT NOT NULL, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, previous_status TEXT NOT NULL DEFAULT '', new_status TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS activity_created_at_idx ON activity (created_at DESC)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS game_results (game_id INTEGER PRIMARY KEY, visitor_score INTEGER NOT NULL, home_score INTEGER NOT NULL, updated_by_email TEXT NOT NULL DEFAULT '', updated_by_name TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS season_archives (id INTEGER PRIMARY KEY AUTOINCREMENT, season_name TEXT NOT NULL, square_price INTEGER NOT NULL, game_prize INTEGER NOT NULL, games_json TEXT NOT NULL, squares_json TEXT NOT NULL, results_json TEXT NOT NULL, visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS season_archives_archived_at_idx ON season_archives (archived_at DESC)`),
   ]);
   await db.prepare("INSERT OR IGNORE INTO members (email, name, role, active) VALUES (?, ?, 'admin', 1)").bind(INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_NAME).run();
 
@@ -36,6 +51,16 @@ async function ensureDatabase() {
     ["paid_at", "ALTER TABLE squares ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''"],
   ].filter(([name]) => !columns.has(name));
   if (additions.length) await db.batch(additions.map(([, sql]) => db.prepare(sql)));
+
+  const settingsInfo = await db.prepare("PRAGMA table_info(settings)").all();
+  const settingsColumns = new Set((settingsInfo.results as Array<{ name:string }>).map((column) => column.name));
+  const settingsAdditions = [
+    ["season_name", "ALTER TABLE settings ADD COLUMN season_name TEXT NOT NULL DEFAULT '2026'"],
+    ["square_price", "ALTER TABLE settings ADD COLUMN square_price INTEGER NOT NULL DEFAULT 100"],
+    ["game_prize", "ALTER TABLE settings ADD COLUMN game_prize INTEGER NOT NULL DEFAULT 300"],
+    ["games_json", "ALTER TABLE settings ADD COLUMN games_json TEXT NOT NULL DEFAULT '[]'"],
+  ].filter(([name]) => !settingsColumns.has(name));
+  if (settingsAdditions.length) await db.batch(settingsAdditions.map(([, sql]) => db.prepare(sql)));
 
   const count = await db.prepare("SELECT COUNT(*) AS total FROM squares").first<{ total: number }>();
   if (!count?.total) {
@@ -52,6 +77,7 @@ async function ensureDatabase() {
 
   await db.batch([
     db.prepare("INSERT OR IGNORE INTO settings (id, visitor_digits, home_digits) VALUES (1, '', '')"),
+    db.prepare("UPDATE settings SET games_json = ? WHERE id = 1 AND (games_json = '' OR games_json = '[]')").bind(JSON.stringify(DEFAULT_GAMES)),
     db.prepare(`UPDATE squares SET reserved_by_name = CASE WHEN instr(contact, ' · ') > 0 THEN trim(substr(contact, 1, instr(contact, ' · ') - 1)) ELSE trim(contact) END, reserved_at = CASE WHEN reserved_at = '' THEN updated_at ELSE reserved_at END WHERE status <> 'available' AND reserved_by_name = ''`),
     db.prepare(`UPDATE squares SET reserved_by_name = CASE reserved_by_name WHEN 'JC Olivares' THEN 'Juan Carlos Olivares' WHEN 'Cabi Flores' THEN 'Cabiria Flores' ELSE reserved_by_name END WHERE reserved_by_name IN ('JC Olivares', 'Cabi Flores')`),
     db.prepare(`UPDATE squares SET paid_by_name = 'Registro inicial', paid_at = CASE WHEN paid_at = '' THEN updated_at ELSE paid_at END WHERE status = 'paid' AND paid_by_name = ''`),
@@ -75,14 +101,18 @@ export async function GET(request: Request) {
   try {
     const actor = await getActor(request);
     if (actor instanceof Response) return actor;
-    const [squareResult, settings, memberResult, activityResult, gameResult] = await Promise.all([
+    const [squareResult, settings, memberResult, activityResult, gameResult, archiveResult] = await Promise.all([
       env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares ORDER BY id`).all(),
-      env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first(),
+      env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>(),
       actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
       actor.role === "admin" ? env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY id DESC LIMIT 60").all() : Promise.resolve({ results: [] }),
       env.DB.prepare("SELECT game_id AS gameId, visitor_score AS visitorScore, home_score AS homeScore, updated_by_name AS updatedByName, updated_at AS updatedAt FROM game_results ORDER BY game_id").all(),
+      actor.role === "admin" ? env.DB.prepare("SELECT id, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, games_json AS gamesJson, archived_at AS archivedAt FROM season_archives ORDER BY id DESC LIMIT 12").all() : Promise.resolve({ results: [] }),
     ]);
-    return Response.json({ squares: squareResult.results, settings, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
+    const games = parseGames(String(settings?.gamesJson ?? ""));
+    const season = { name:String(settings?.seasonName ?? "2026"), squarePrice:Number(settings?.squarePrice ?? 100), gamePrize:Number(settings?.gamePrize ?? 300), games };
+    const archives = (archiveResult.results as Array<Record<string, unknown>>).map((item) => ({ id:item.id, seasonName:item.seasonName, squarePrice:item.squarePrice, gamePrize:item.gamePrize, archivedAt:item.archivedAt, gameCount:parseGames(String(item.gamesJson ?? "")).length }));
+    return Response.json({ squares: squareResult.results, settings:{ visitorDigits:settings?.visitorDigits ?? "", homeDigits:settings?.homeDigits ?? "" }, season, archives, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "No fue posible cargar el tablero" }, { status: 500 });
   }
@@ -93,6 +123,33 @@ export async function PUT(request: Request) {
     const actor = await getActor(request);
     if (actor instanceof Response) return actor;
     const payload = await request.json() as Record<string, unknown>;
+
+    if (payload.action === "season_save" || payload.action === "season_activate") {
+      if (actor.role !== "admin") return forbidden();
+      const season = validateSeason(payload.season);
+      if (!season) return Response.json({ error:"Completa el nombre de temporada, costo, premio y todos los datos de los juegos" }, { status:400 });
+      if (payload.action === "season_save") {
+        await env.DB.batch([
+          env.DB.prepare("UPDATE settings SET season_name = ?, square_price = ?, game_prize = ?, games_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1").bind(season.name, season.squarePrice, season.gamePrize, JSON.stringify(season.games)),
+          activity(actor, null, "season_updated", "", "", `${season.name} · ${season.games.length} juegos`),
+        ]);
+        return Response.json({ season });
+      }
+      const current = await env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>();
+      if (String(payload.confirmSeasonName ?? "") !== String(current?.seasonName ?? "")) return Response.json({ error:"Confirma la temporada actual antes de iniciar una nueva" }, { status:400 });
+      const [squareSnapshot, resultSnapshot] = await Promise.all([
+        env.DB.prepare("SELECT * FROM squares ORDER BY id").all(),
+        env.DB.prepare("SELECT * FROM game_results ORDER BY game_id").all(),
+      ]);
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO season_archives (season_name, square_price, game_prize, games_json, squares_json, results_json, visitor_digits, home_digits) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(String(current?.seasonName ?? ""), Number(current?.squarePrice ?? 100), Number(current?.gamePrize ?? 300), String(current?.gamesJson ?? "[]"), JSON.stringify(squareSnapshot.results), JSON.stringify(resultSnapshot.results), String(current?.visitorDigits ?? ""), String(current?.homeDigits ?? "")),
+        env.DB.prepare("UPDATE squares SET status = 'available', participant = '', contact = '', phone = '', reserved_by_email = '', reserved_by_name = '', reserved_at = '', paid_by_email = '', paid_by_name = '', paid_at = '', updated_at = CURRENT_TIMESTAMP"),
+        env.DB.prepare("DELETE FROM game_results"),
+        env.DB.prepare("UPDATE settings SET visitor_digits = '', home_digits = '', season_name = ?, square_price = ?, game_prize = ?, games_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1").bind(season.name, season.squarePrice, season.gamePrize, JSON.stringify(season.games)),
+        activity(actor, null, "season_activated", String(current?.seasonName ?? ""), season.name, `${season.games.length} juegos · tablero reiniciado`),
+      ]);
+      return Response.json({ season, activated:true });
+    }
 
     if (payload.action === "digits") {
       if (actor.role !== "admin") return forbidden();
@@ -109,7 +166,8 @@ export async function PUT(request: Request) {
     if (payload.action === "game_result") {
       if (actor.role !== "admin") return forbidden();
       const gameId = Number(payload.gameId), visitorScore = Number(payload.visitorScore), homeScore = Number(payload.homeScore);
-      if (!Number.isInteger(gameId) || gameId < 1 || gameId > 17 || !Number.isInteger(visitorScore) || visitorScore < 0 || visitorScore > 999 || !Number.isInteger(homeScore) || homeScore < 0 || homeScore > 999) return Response.json({ error:"Resultado de juego inválido" }, { status:400 });
+      const gameCount = await currentGameCount();
+      if (!Number.isInteger(gameId) || gameId < 1 || gameId > gameCount || !Number.isInteger(visitorScore) || visitorScore < 0 || visitorScore > 999 || !Number.isInteger(homeScore) || homeScore < 0 || homeScore > 999) return Response.json({ error:"Resultado de juego inválido" }, { status:400 });
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO game_results (game_id, visitor_score, home_score, updated_by_email, updated_by_name, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
           ON CONFLICT(game_id) DO UPDATE SET visitor_score = excluded.visitor_score, home_score = excluded.home_score, updated_by_email = excluded.updated_by_email, updated_by_name = excluded.updated_by_name, updated_at = CURRENT_TIMESTAMP`).bind(gameId, visitorScore, homeScore, actor.email, actor.name),
@@ -122,7 +180,7 @@ export async function PUT(request: Request) {
     if (payload.action === "game_result_clear") {
       if (actor.role !== "admin") return forbidden();
       const gameId = Number(payload.gameId);
-      if (!Number.isInteger(gameId) || gameId < 1 || gameId > 17) return Response.json({ error:"Juego inválido" }, { status:400 });
+      if (!Number.isInteger(gameId) || gameId < 1 || gameId > await currentGameCount()) return Response.json({ error:"Juego inválido" }, { status:400 });
       const existing = await env.DB.prepare("SELECT game_id FROM game_results WHERE game_id = ?").bind(gameId).first();
       if (existing) await env.DB.batch([
         env.DB.prepare("DELETE FROM game_results WHERE game_id = ?").bind(gameId),
@@ -309,3 +367,13 @@ function validDigits(value: string) { return value.length === 10 && new Set(valu
 function emailPattern(value: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
 function isLocalIdentity(value: string) { return /^local:[0-9a-f-]{36}$/.test(value); }
 function roleLabel(role: Role) { return role === "admin" ? "Administrador" : role === "treasury" ? "Tesorería" : "Usuario"; }
+function parseGames(value:string):Game[] { try { const parsed=JSON.parse(value); return Array.isArray(parsed)&&parsed.length ? parsed : DEFAULT_GAMES; } catch { return DEFAULT_GAMES; } }
+function validateSeason(value:unknown):SeasonConfig|null {
+  if (!value || typeof value !== "object") return null;
+  const source=value as Record<string, unknown>, name=String(source.name??"").trim(), squarePrice=Number(source.squarePrice), gamePrize=Number(source.gamePrize), rawGames=source.games;
+  if (name.length<2||name.length>24||!Number.isInteger(squarePrice)||squarePrice<1||squarePrice>100000||!Number.isInteger(gamePrize)||gamePrize<1||gamePrize>1000000||!Array.isArray(rawGames)||rawGames.length<1||rawGames.length>25) return null;
+  const games=rawGames.map((item)=>{const game=item as Record<string,unknown>;return{date:String(game?.date??"").trim(),visitor:String(game?.visitor??"").trim(),home:String(game?.home??"").trim()};});
+  if (games.some((game)=>!game.date||!game.visitor||!game.home||game.date.length>30||game.visitor.length>80||game.home.length>80)) return null;
+  return {name,squarePrice,gamePrize,games};
+}
+async function currentGameCount(){const row=await env.DB.prepare("SELECT games_json AS gamesJson FROM settings WHERE id = 1").first<{gamesJson:string}>();return parseGames(row?.gamesJson??"").length;}
