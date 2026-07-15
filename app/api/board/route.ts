@@ -201,6 +201,7 @@ export async function PUT(request: Request) {
     const boardLocked = validDigits(String(settings?.visitorDigits ?? "")) && validDigits(String(settings?.homeDigits ?? ""));
     const owns = String(current.reservedByEmail ?? "").toLowerCase() === actor.email;
     const treasuryPayment = actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid" && (!owns || boardLocked);
+    if (current.status === "paid" && requestedStatus === "reserved" && actor.role !== "admin") return forbidden("Sólo Administración puede regresar una casilla pagada a reservada");
     if (boardLocked && actor.role !== "admin" && !(actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid")) return forbidden("El tablero está cerrado; sólo Administración puede editar y Tesorería confirmar pagos");
     if (actor.role === "user" && current.status === "reserved" && requestedStatus === "paid") return forbidden("Solo Tesorería y Administración pueden confirmar pagos");
     if (!canChangeSquare(actor.role, String(current.status), requestedStatus, owns)) return forbidden("No puedes modificar una casilla vendida por otro socio");
