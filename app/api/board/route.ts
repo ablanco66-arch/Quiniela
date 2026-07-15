@@ -119,6 +119,28 @@ export async function PUT(request: Request) {
       return Response.json({ gameResult });
     }
 
+    if (payload.action === "game_result_clear") {
+      if (actor.role !== "admin") return forbidden();
+      const gameId = Number(payload.gameId);
+      if (!Number.isInteger(gameId) || gameId < 1 || gameId > 17) return Response.json({ error:"Juego inválido" }, { status:400 });
+      const existing = await env.DB.prepare("SELECT game_id FROM game_results WHERE game_id = ?").bind(gameId).first();
+      if (existing) await env.DB.batch([
+        env.DB.prepare("DELETE FROM game_results WHERE game_id = ?").bind(gameId),
+        activity(actor, null, "game_result_cleared", "", "", `Juego ${gameId}`),
+      ]);
+      return Response.json({ gameId, cleared:Boolean(existing) });
+    }
+
+    if (payload.action === "game_results_clear_all") {
+      if (actor.role !== "admin") return forbidden();
+      const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM game_results").first<{ total:number }>();
+      if (Number(count?.total ?? 0) > 0) await env.DB.batch([
+        env.DB.prepare("DELETE FROM game_results"),
+        activity(actor, null, "game_results_cleared", "", "", `${count?.total ?? 0} resultados`),
+      ]);
+      return Response.json({ cleared:Number(count?.total ?? 0) });
+    }
+
     if (payload.action === "member_create_local") {
       if (actor.role !== "admin") return forbidden();
       const name = String(payload.name ?? "").trim();
