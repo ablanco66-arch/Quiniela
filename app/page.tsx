@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type Status = "available" | "reserved" | "paid";
 type Role = "admin" | "user" | "treasury";
+type FlyerType = "board" | "board-en" | "report";
 type Square = {
   id: number; status: Status; participant: string; contact: string; phone: string;
   reservedByEmail: string; reservedByName: string; reservedAt: string;
@@ -41,7 +42,7 @@ export default function Home() {
   const [showFlyer, setShowFlyer] = useState(false);
   const [flyerUrl, setFlyerUrl] = useState("");
   const [flyerBlob, setFlyerBlob] = useState<Blob | null>(null);
-  const [flyerType, setFlyerType] = useState<"board"|"report">("board");
+  const [flyerType, setFlyerType] = useState<FlyerType>("board");
   const [generatingFlyer, setGeneratingFlyer] = useState(false);
   const [refreshingReports, setRefreshingReports] = useState(false);
   const [refreshingBoard, setRefreshingBoard] = useState(false);
@@ -131,13 +132,13 @@ export default function Home() {
     finally { window.location.reload(); }
   }
 
-  async function openFlyer() {
+  async function openFlyer(language:"es"|"en"="es") {
     setGeneratingFlyer(true);
     try {
       const latestSquares = await loadBoard();
       if (!latestSquares) return;
-      const result = await createFlyer(latestSquares);
-      setFlyerType("board"); setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
+      const result = await createFlyer(latestSquares,language);
+      setFlyerType(language==="en"?"board-en":"board"); setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
     } catch { setNotice("No fue posible generar el flier. Intenta nuevamente."); }
     finally { setGeneratingFlyer(false); }
   }
@@ -175,10 +176,10 @@ export default function Home() {
 
   async function shareFlyer() {
     if (!flyerBlob) return;
-    const filename=flyerType==="report"?"avance-quiniela-mnf-2026.png":"quiniela-mnf-2026.png";
+    const filename=flyerFilename(flyerType);
     const file = new File([flyerBlob], filename, { type:"image/png" });
     try {
-      if (navigator.share && navigator.canShare?.({ files:[file] })) await navigator.share({ title:"Quiniela MNF 2026", text:flyerType==="report"?"¡Vamos por las 100! Este es nuestro avance de ventas en la Quiniela MNF 2026.":"¡Participa por una buena causa! Aparta tu casilla de la Quiniela MNF 2026.", files:[file] });
+      if (navigator.share && navigator.canShare?.({ files:[file] })) await navigator.share({ title:flyerType==="board-en"?"MNF Football Pool 2026":"Quiniela MNF 2026", text:flyerType==="report"?"¡Vamos por las 100! Este es nuestro avance de ventas en la Quiniela MNF 2026.":flyerType==="board-en"?"Play for a great cause! Pick your square in the 2026 MNF Football Pool.":"¡Participa por una buena causa! Aparta tu casilla de la Quiniela MNF 2026.", files:[file] });
       else await copyFlyer();
     } catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) setNotice("No fue posible compartir; puedes copiar o descargar el flier."); }
   }
@@ -213,7 +214,7 @@ export default function Home() {
     {notice && <button className="notice" onClick={() => setNotice("")} aria-label="Cerrar aviso">{notice}<span>×</span></button>}
 
     {tab === "board" && <section className="content board-section">
-      <div className="section-heading"><div><p className="kicker">Tablero oficial · 100 casillas</p><h3>Elige tu número de la suerte</h3></div><div className="heading-actions"><button className="flyer-button" onClick={openFlyer} disabled={generatingFlyer}>{generatingFlyer ? "Generando…" : "🏈 Generar flier"}</button>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div></div>
+      <div className="section-heading"><div><p className="kicker">Tablero oficial · 100 casillas</p><h3>Elige tu número de la suerte</h3></div><div className="heading-actions"><button className="flyer-button" onClick={()=>openFlyer("es")} disabled={generatingFlyer}>{generatingFlyer ? "Generando…" : "🏈 Flier español"}</button><button className="flyer-button flyer-button-en" onClick={()=>openFlyer("en")} disabled={generatingFlyer}>{generatingFlyer ? "Generating…" : "🏈 English flyer"}</button>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div></div>
       <div className="summary-grid">
         <button className={filter === "available" ? "summary active" : "summary"} onClick={() => setFilter(filter === "available" ? "all" : "available")}><span className="dot available"/><div><strong>{counts.available}</strong><small>Disponibles</small></div></button>
         <button className={filter === "reserved" ? "summary active" : "summary"} onClick={() => setFilter(filter === "reserved" ? "all" : "reserved")}><span className="dot reserved"/><div><strong>{counts.reserved}</strong><small>Reservadas</small></div></button>
@@ -237,7 +238,7 @@ export default function Home() {
     <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
 
     {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} boardLocked={boardLocked} onClose={() => setSelected(null)} onSave={saveSquare} />}
-    {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">Listo para compartir</p><h3 id="flyer-title">{flyerType==="report"?"Flier de avance":"Flier de la quiniela"}</h3><p>{flyerType==="report"?"El reporte refleja el avance más reciente por socio.":"La imagen refleja el estado actual del tablero."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="report"?"Flier del avance de casillas por socio":"Flier vertical de la Quiniela MNF 2026 con tablero y reglas"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>Guardar PNG</button></div></section></div>}
+    {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">{flyerType==="board-en"?"Ready to share":"Listo para compartir"}</p><h3 id="flyer-title">{flyerType==="report"?"Flier de avance":flyerType==="board-en"?"English flyer":"Flier de la quiniela"}</h3><p>{flyerType==="report"?"El reporte refleja el avance más reciente por socio.":flyerType==="board-en"?"The image shows the latest board status and rules in English.":"La imagen refleja el estado actual del tablero."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="report"?"Flier del avance de casillas por socio":flyerType==="board-en"?"English MNF Football Pool flyer with board and rules":"Flier vertical de la Quiniela MNF 2026 con tablero y reglas"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>Guardar PNG</button></div></section></div>}
     {showDigits && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowDigits(false)}><section className="modal digits-modal" role="dialog" aria-modal="true" aria-labelledby="digits-title"><button className="modal-close" onClick={() => setShowDigits(false)} aria-label="Cerrar">×</button><p className="kicker">Inicio de temporada</p><h3 id="digits-title">Números de juego</h3><p className="modal-help">Déjalos vacíos hasta el sorteo. Después, ingresa los 10 dígitos en el orden asignado.</p><label>Columnas — visitante<input value={visitorDigits} onChange={(e) => setVisitorDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 7451029863" /></label><label>Renglones — casa<input value={homeDigits} onChange={(e) => setHomeDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 0294831756" /></label><div className="modal-actions"><button className="secondary" onClick={() => {setVisitorDigits("");setHomeDigits("");}}>Limpiar</button><button className="primary" onClick={saveDigits} disabled={saving}>{saving ? "Guardando…" : "Guardar números"}</button></div></section></div>}
   </main>;
 }
@@ -351,40 +352,45 @@ async function createReportFlyer(rows:ReportRow[]){
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));return{blob,url:canvas.toDataURL("image/png")};
 }
 
-async function createFlyer(squares: Square[]) {
+async function createFlyer(squares: Square[],language:"es"|"en"="es") {
   const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1920;
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas no disponible");
   const styles=getComputedStyle(document.body), displayFont=styles.getPropertyValue("--font-display").trim()||"Arial Black", bodyFont=styles.getPropertyValue("--font-body").trim()||"Arial";
   const navy = "#061b3e", blue = "#123a78", gold = "#f7b500", green = "#168553", cream = "#fff8e5", white = "#ffffff";
+  const english=language==="en";
+  const copy=english?{
+    name:"MNF FOOTBALL POOL 2026",headline:"PLAY. WIN. GIVE BACK.",intro:"Pick a square and turn every Monday into support for a great cause.",offer:"$100 USD PER SQUARE   •   $300 USD PER GAME   •   17 GAMES",
+    legend:["AVAILABLE","RESERVED","PAID"],rulesTitle:"HOW TO PLAY",rules:["$100 USD per square. Payment in full by September 14, 2026.","$300 USD for each participating game; 17 chances to win.","Numbers are drawn at the start of the season and remain hidden until then.","Final score counts, including overtime; use the last digit for each team."],
+    warning:"UNPAID SQUARES DO NOT PLAY  •  IF AN UNSOLD SQUARE WINS, THE CLUB KEEPS THE PRIZE  •  LISTED GAMES ONLY",cta:"JOIN TODAY AND SUPPORT PROJECTS THAT CHANGE LIVES!"
+  }:{
+    name:"QUINIELA MNF 2026",headline:"JUEGA. GANA. AYUDA.",intro:"Aparta una casilla y transforma cada lunes en una buena causa.",offer:"$100 USD POR CASILLA   •   $300 USD POR JUEGO   •   17 JUEGOS",
+    legend:["DISPONIBLE","RESERVADA","PAGADA"],rulesTitle:"REGLAS DEL JUEGO",rules:["$100 USD por casilla. Pago total antes del 14 de septiembre de 2026.","$300 USD por cada juego participante; tienes 17 oportunidades de ganar.","Los números se sortean al inicio de temporada y permanecen ocultos hasta entonces.","Cuenta el marcador final, incluidos tiempos extra, usando la unidad de cada equipo."],
+    warning:"NO PAGADAS NO JUEGAN  •  SI GANA UNA NO VENDIDA, EL PREMIO QUEDA EN EL CLUB  •  SOLO JUEGOS LISTADOS",cta:"¡PARTICIPA HOY Y APOYA PROYECTOS QUE CAMBIAN VIDAS!"
+  };
   const stadium = await loadCanvasImage("/flyer-stadium-bg.png"); ctx.drawImage(stadium,0,0,1080,1920);
   const shade=ctx.createLinearGradient(0,0,0,1920);shade.addColorStop(0,"#020a1dcc");shade.addColorStop(.46,"#061b3e99");shade.addColorStop(.78,"#031128b8");shade.addColorStop(1,"#02091866");ctx.fillStyle=shade;ctx.fillRect(0,0,1080,1920);
   ctx.save(); ctx.globalAlpha=.09; ctx.strokeStyle=gold; ctx.lineWidth=2; for(let y=34;y<780;y+=92){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1080,y);ctx.stroke();} ctx.restore();
   ctx.fillStyle=gold; ctx.fillRect(0,0,1080,14); ctx.fillRect(0,1906,1080,14);
 
   const logo = await loadCanvasImage("/logo-crjc-white-gold.png"); const logoW=480, logoH=logoW*(logo.height/logo.width); ctx.drawImage(logo,(1080-logoW)/2,34,logoW,logoH);
-  ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font=`400 30px ${displayFont}`; ctx.fillText("QUINIELA MNF 2026",540,305);
-  ctx.fillStyle=white; ctx.font=`400 72px ${displayFont}`; ctx.fillText("JUEGA. GANA. AYUDA.",540,382);
-  ctx.fillStyle=cream; ctx.font=`600 29px ${bodyFont}`; ctx.fillText("Aparta una casilla y transforma cada lunes en una buena causa.",540,430);
+  ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font=`400 30px ${displayFont}`; ctx.fillText(copy.name,540,305);
+  ctx.fillStyle=white; ctx.font=`400 72px ${displayFont}`; ctx.fillText(copy.headline,540,382);
+  ctx.fillStyle=cream; ctx.font=`600 29px ${bodyFont}`; ctx.fillText(copy.intro,540,430);
 
-  roundedBox(ctx,80,466,920,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; ctx.font=`400 27px ${displayFont}`; ctx.fillText("$100 USD POR CASILLA   •   $300 USD POR JUEGO   •   17 JUEGOS",540,518);
+  roundedBox(ctx,80,466,920,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; ctx.font=`400 27px ${displayFont}`; ctx.fillText(copy.offer,540,518);
 
-  const legend=[{label:"DISPONIBLE",color:cream,text:navy},{label:"RESERVADA",color:gold,text:navy},{label:"PAGADA",color:green,text:white}];
+  const legend=[{label:copy.legend[0],color:cream,text:navy},{label:copy.legend[1],color:gold,text:navy},{label:copy.legend[2],color:green,text:white}];
   ctx.textAlign="left"; legend.forEach((item,index)=>{const lx=154+index*285;ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font=`400 22px ${displayFont}`;ctx.fillText(item.label,lx+34,596);});
 
   const gridX=90, gridY=625, cell=84, gap=6;
   roundedBox(ctx,68,603,944,944,26,"#03112be8",gold,4);
   squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`400 29px ${displayFont}`;ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
 
-  ctx.textAlign="left"; ctx.fillStyle=gold; ctx.font=`400 32px ${displayFont}`; ctx.fillText("REGLAS DEL JUEGO",82,1592);
-  const rules=[
-    ["1", "$100 USD por casilla. Pago total antes del 14 de septiembre de 2026."],
-    ["2", "$300 USD por cada juego participante; tienes 17 oportunidades de ganar."],
-    ["3", "Los números se sortean al inicio de temporada y permanecen ocultos hasta entonces."],
-    ["4", "Cuenta el marcador final, incluidos tiempos extra, usando la unidad de cada equipo."],
-  ];
+  ctx.textAlign="left"; ctx.fillStyle=gold; ctx.font=`400 32px ${displayFont}`; ctx.fillText(copy.rulesTitle,82,1592);
+  const rules=copy.rules.map((text,index)=>[String(index+1),text]);
   rules.forEach(([number,text],index)=>{const y=1632+index*54;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,y-8,20,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font=`400 22px ${displayFont}`;ctx.fillText(number,100,y);ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`600 20px ${bodyFont}`;drawWrappedText(ctx,text,136,y,820,23);});
-  ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font=`800 15px ${bodyFont}`;ctx.fillText("NO PAGADAS NO JUEGAN  •  SI GANA UNA NO VENDIDA, EL PREMIO QUEDA EN EL CLUB  •  SOLO JUEGOS LISTADOS",540,1842);
-  roundedBox(ctx,70,1860,940,42,13,gold,null,0); ctx.fillStyle=navy; ctx.textAlign="center"; ctx.font=`400 24px ${displayFont}`; ctx.fillText("¡PARTICIPA HOY Y APOYA PROYECTOS QUE CAMBIAN VIDAS!",540,1889);
+  ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font=`800 15px ${bodyFont}`;ctx.fillText(copy.warning,540,1842);
+  roundedBox(ctx,70,1860,940,42,13,gold,null,0); ctx.fillStyle=navy; ctx.textAlign="center"; ctx.font=`400 24px ${displayFont}`; ctx.fillText(copy.cta,540,1889);
   const blob = await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));
   return { blob, url:canvas.toDataURL("image/png") };
 }
@@ -393,7 +399,8 @@ function roundedBox(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:nu
 function drawWrappedText(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,maxWidth:number,lineHeight:number){const words=text.split(" ");let line="",lineY=y;for(const word of words){const test=`${line}${word} `;if(line&&ctx.measureText(test).width>maxWidth){ctx.fillText(line.trim(),x,lineY);line=`${word} `;lineY+=lineHeight;}else line=test;}if(line)ctx.fillText(line.trim(),x,lineY);}
 function fitCanvasText(ctx:CanvasRenderingContext2D,text:string,maxWidth:number){if(ctx.measureText(text).width<=maxWidth)return text;let value=text;while(value.length>1&&ctx.measureText(`${value}…`).width>maxWidth)value=value.slice(0,-1);return `${value}…`;}
 function loadCanvasImage(src:string){return new Promise<HTMLImageElement>((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error("No se pudo cargar el logo"));image.src=src;});}
-function downloadFlyer(blob:Blob,type:"board"|"report"="board"){const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=type==="report"?"avance-quiniela-mnf-2026.png":"quiniela-mnf-2026.png";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function flyerFilename(type:FlyerType){return type==="report"?"avance-quiniela-mnf-2026.png":type==="board-en"?"mnf-football-pool-2026-en.png":"quiniela-mnf-2026.png";}
+function downloadFlyer(blob:Blob,type:FlyerType="board"){const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=flyerFilename(type);link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 function isOwned(square:Square,me:Member){ return Boolean(square.reservedByEmail) && square.reservedByEmail.toLowerCase()===me.email.toLowerCase(); }
 function labelFor(status:Status){ return status==="available"?"Disponible":status==="reserved"?"Reservada":"Pagada"; }
