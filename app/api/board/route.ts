@@ -79,7 +79,7 @@ export async function GET(request: Request) {
       env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares ORDER BY id`).all(),
       env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first(),
       actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
-      env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY id DESC LIMIT 60").all(),
+      actor.role === "admin" ? env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY id DESC LIMIT 60").all() : Promise.resolve({ results: [] }),
       env.DB.prepare("SELECT game_id AS gameId, visitor_score AS visitorScore, home_score AS homeScore, updated_by_name AS updatedByName, updated_at AS updatedAt FROM game_results ORDER BY game_id").all(),
     ]);
     return Response.json({ squares: squareResult.results, settings, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
