@@ -515,7 +515,7 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
 
   const gridX=148, gridY=625, cell=74, gap=5;
   roundedBox(ctx,126,603,828,834,26,"#03112be8",gold,4);
-  ctx.fillStyle=gold;ctx.textAlign="center";ctx.font=`400 17px ${displayFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",540,620);ctx.save();ctx.translate(148,1020);ctx.rotate(-Math.PI/2);ctx.fillText(english?"HOME":"CASA",0,0);ctx.restore();
+  ctx.fillStyle=gold;ctx.textAlign="center";ctx.font=`400 17px ${displayFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",540,620);ctx.save();ctx.translate(137,1020);ctx.rotate(-Math.PI/2);ctx.textBaseline="middle";ctx.fillText(english?"HOME":"CASA",0,0);ctx.restore();
   squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`400 29px ${displayFont}`;ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
 
   ctx.textAlign="left"; ctx.fillStyle=gold;canvasFontToFit(ctx,copy.rulesTitle,916,30,displayFont,22);ctx.fillText(copy.rulesTitle,82,1482);
