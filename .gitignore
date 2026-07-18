@@ -44,3 +44,6 @@ next-env.d.ts
 /work/
 /tmp/
 /devserver*.log
+/.site-stage-*/
+/.site-build-*.tar.gz
+/.node_modules-broken-*/
