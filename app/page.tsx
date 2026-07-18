@@ -512,7 +512,7 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
   roundedBox(ctx,80,466,920,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; ctx.font=`400 27px ${displayFont}`; ctx.fillText(copy.offer,540,518);
 
   const legend=[{label:copy.legend[0],color:cream,text:navy},{label:copy.legend[1],color:gold,text:navy},{label:copy.legend[2],color:green,text:white}];
-  ctx.textAlign="left"; legend.forEach((item,index)=>{const lx=154+index*285;ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.font=`400 22px ${displayFont}`;ctx.fillText(item.label,lx+34,596);});
+  ctx.textAlign="left"; legend.forEach((item,index)=>{ctx.font=`400 22px ${displayFont}`;const sectionCenter=122+(index+.5)*(836/3),groupWidth=24+10+ctx.measureText(item.label).width,lx=sectionCenter-groupWidth/2;ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.fillText(item.label,lx+34,596);});
 
   const gridX=150, gridY=630, cell=74, gap=5;
   roundedBox(ctx,122,608,836,830,26,"#03112be8",gold,4);
