@@ -25,7 +25,7 @@ test("application source contains production branding and no starter preview", a
 
   assert.match(page, /Quiniela MNF/);
   assert.match(layout, /Quiniela MNF 2026/);
-  assert.match(styles, /\.header-logo\s*\{[^}]*width:249\.2px/);
+  assert.match(styles, /\.header-logo\s*\{[^}]*width:274\.12px/);
   assert.match(styles, /\.brand-copy h1\s*\{[^}]*font-family:var\(--font-sport\)/);
   assert.match(packageJson, /"name": "quiniela-mnf-2026"/);
   assert.match(vite, /sites\(\)/);
