@@ -40,6 +40,7 @@ export async function ensureLocalAuthSchema() {
 
   await db.batch([
     db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS members_username_unique ON members (username) WHERE username IS NOT NULL AND username <> ''"),
+    db.prepare("CREATE INDEX IF NOT EXISTS members_name_active_approval_idx ON members (name, active, approval_status)"),
     db.prepare(`CREATE TABLE IF NOT EXISTS sessions (
       token_hash TEXT PRIMARY KEY,
       member_email TEXT NOT NULL,

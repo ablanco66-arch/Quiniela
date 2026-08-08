@@ -40,7 +40,7 @@ export const seasonArchives = sqliteTable("season_archives", {
   visitorDigits: text("visitor_digits").notNull().default(""),
   homeDigits: text("home_digits").notNull().default(""),
   archivedAt: text("archived_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("season_archives_archived_at_idx").on(table.archivedAt)]);
+}, (table) => [index("season_archives_archived_id_idx").on(table.archivedAt, table.id)]);
 
 export const members = sqliteTable("members", {
   email: text("email").primaryKey(),
@@ -56,7 +56,7 @@ export const members = sqliteTable("members", {
   mustChangePassword: integer("must_change_password").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => [index("members_name_active_approval_idx").on(table.name, table.active, table.approvalStatus)]);
 
 export const sessions = sqliteTable("sessions", {
   tokenHash: text("token_hash").primaryKey(),
@@ -76,7 +76,7 @@ export const activity = sqliteTable("activity", {
   newStatus: text("new_status").notNull().default(""),
   details: text("details").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("activity_created_at_idx").on(table.createdAt)]);
+}, (table) => [index("activity_created_id_idx").on(table.createdAt, table.id)]);
 
 export const gameResults = sqliteTable("game_results", {
   gameId: integer("game_id").primaryKey(),
