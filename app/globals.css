@@ -129,6 +129,7 @@ footer { background:linear-gradient(90deg,#020817f7,#0b3268f2);border-top:5px so
 
 @media(max-width:700px){
   .auth-card { padding:22px 18px 24px; }.auth-card img { width:185px;height:78px; }.auth-card h1 { font-size:28px; }.member-list article { grid-template-columns:minmax(105px,1fr) 76px; }.member-list article .member-actions { grid-column:1/-1;justify-content:flex-end; }.member-list article>span { justify-self:end; }
+  .auth-form input { font-size:16px;line-height:1.25; }
 }
 
 /* Configuración anual de temporada */

@@ -315,7 +315,11 @@ function AccessScreen({ state, email }:{ state:"loading"|"signin"|"denied"|"pass
       const data = responseText ? JSON.parse(responseText) : {};
       if (!response.ok) throw new Error(data.error || "No fue posible continuar");
       if (mode === "login" && data.mustChangePassword) { setMode("change"); setPassword(""); setConfirmPassword(""); setMessage("Por seguridad, reemplaza la contraseña temporal."); }
-      else if (mode === "login" || mode === "change") window.location.reload();
+      else if (mode === "login" || mode === "change") {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+        window.setTimeout(() => window.location.reload(), 80);
+      }
       else { setMessage(data.message); setPassword(""); setConfirmPassword(""); }
     } catch (error) { setMessage(error instanceof Error ? error.message : "No fue posible continuar"); }
     finally { setSubmitting(false); }
