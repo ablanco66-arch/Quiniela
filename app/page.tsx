@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type Status = "available" | "reserved" | "paid";
 type Role = "admin" | "user" | "treasury";
-type FlyerType = "board" | "board-en" | "report" | "winner";
+type FlyerType = "board" | "board-en" | "schedule" | "schedule-en" | "report" | "winner";
 type Square = {
   id: number; status: Status; participant: string; contact: string; phone: string;
   reservedByEmail: string; reservedByName: string; reservedAt: string;
@@ -175,13 +175,13 @@ export default function Home() {
     finally { window.location.reload(); }
   }
 
-  async function openFlyer(language:"es"|"en"="es") {
+  async function openFlyer(language:"es"|"en"="es",withSchedule=false) {
     setGeneratingFlyer(true);
     try {
       const latestSquares = await loadBoard();
       if (!latestSquares) return;
-      const result = await createFlyer(latestSquares,language,season);
-      setFlyerType(language==="en"?"board-en":"board"); setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
+      const result = await createFlyer(latestSquares,language,season,withSchedule);
+      setFlyerType(withSchedule?(language==="en"?"schedule-en":"schedule"):(language==="en"?"board-en":"board")); setFlyerUrl(result.url); setFlyerBlob(result.blob); setShowFlyer(true);
     } catch { setNotice("No fue posible generar el flier. Intenta nuevamente."); }
     finally { setGeneratingFlyer(false); }
   }
@@ -266,7 +266,7 @@ export default function Home() {
     {notice && <button className="notice" onClick={() => setNotice("")} aria-label="Cerrar aviso">{notice}<span>×</span></button>}
 
     {tab === "board" && <section className="content board-section">
-      <div className="section-heading"><div><p className="kicker">Tablero oficial · 100 casillas</p><h3>Elige tu número de la suerte</h3></div><div className="heading-actions"><button className="flyer-button" onClick={()=>openFlyer("es")} disabled={generatingFlyer}>{generatingFlyer ? "Generando…" : "🏈 Flier español"}</button><button className="flyer-button flyer-button-en" onClick={()=>openFlyer("en")} disabled={generatingFlyer}>{generatingFlyer ? "Generating…" : "🏈 English flyer"}</button>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div></div>
+      <div className="section-heading"><div><p className="kicker">Tablero oficial · 100 casillas</p><h3>Elige tu número de la suerte</h3></div><div className="heading-actions"><button className="flyer-button" onClick={()=>openFlyer("es")} disabled={generatingFlyer}>{generatingFlyer ? "Generando…" : "🏈 Flier español"}</button><button className="flyer-button flyer-button-en" onClick={()=>openFlyer("en")} disabled={generatingFlyer}>{generatingFlyer ? "Generating…" : "🏈 English flyer"}</button><button className="flyer-button" onClick={()=>openFlyer("es",true)} disabled={generatingFlyer}>{generatingFlyer ? "Generando…" : "📅 Flier + juegos"}</button><button className="flyer-button flyer-button-en" onClick={()=>openFlyer("en",true)} disabled={generatingFlyer}>{generatingFlyer ? "Generating…" : "📅 Flyer + games"}</button>{me?.role === "admin" && <button className="outline-button" onClick={() => setShowDigits(true)}>⚙ Números de juego</button>}</div></div>
       <div className="summary-grid">
         <button className={filter === "available" ? "summary active" : "summary"} onClick={() => setFilter(filter === "available" ? "all" : "available")}><span className="dot available"/><div><strong>{counts.available}</strong><small>Disponibles</small></div></button>
         <button className={filter === "reserved" ? "summary active" : "summary"} onClick={() => setFilter(filter === "reserved" ? "all" : "reserved")}><span className="dot reserved"/><div><strong>{counts.reserved}</strong><small>Reservadas</small></div></button>
@@ -290,7 +290,7 @@ export default function Home() {
     <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" /></div><p>Genera un impacto duradero</p><span>Actualizado 13 julio 2026</span></footer>
 
     {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} boardLocked={boardLocked} visitorDigits={visitorDigits} homeDigits={homeDigits} onClose={() => setSelected(null)} onSave={saveSquare} />}
-    {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">{flyerType==="board-en"?"Ready to share":"Listo para compartir"}</p><h3 id="flyer-title">{flyerType==="winner"?"Flier del ganador":flyerType==="report"?"Flier de avance":flyerType==="board-en"?"English flyer":"Flier de la quiniela"}</h3><p>{flyerType==="winner"?"Celebra y comparte al ganador de esta fecha.":flyerType==="report"?"El reporte refleja el avance más reciente por socio.":flyerType==="board-en"?"Board, rules, example and the full MNF schedule with team logos.":"Tablero, reglas, ejemplo y calendario MNF completo con logos de los equipos."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="winner"?"Flier de felicitación al ganador de la Quiniela MNF":flyerType==="report"?"Flier del avance de casillas por socio":flyerType==="board-en"?"English MNF Football Pool flyer with board, rules and schedule":"Flier vertical de la Quiniela MNF con tablero, reglas y calendario"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>Guardar PNG</button></div></section></div>}
+    {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label="Cerrar">×</button><div className="flyer-modal-head"><p className="kicker">{flyerType==="board-en"||flyerType==="schedule-en"?"Ready to share":"Listo para compartir"}</p><h3 id="flyer-title">{flyerType==="winner"?"Flier del ganador":flyerType==="report"?"Flier de avance":flyerType==="board-en"?"English flyer":flyerType==="schedule-en"?"English flyer + games":flyerType==="schedule"?"Flier con juegos MNF":"Flier de la quiniela"}</h3><p>{flyerType==="winner"?"Celebra y comparte al ganador de esta fecha.":flyerType==="report"?"El reporte refleja el avance más reciente por socio.":flyerType==="schedule-en"?"Board, rules, example and the full MNF schedule with team logos.":flyerType==="schedule"?"Tablero, reglas, ejemplo y calendario MNF completo con logos de los equipos.":flyerType==="board-en"?"The original English board flyer.":"El flier original con el estado actual del tablero."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="winner"?"Flier de felicitación al ganador de la Quiniela MNF":flyerType==="report"?"Flier del avance de casillas por socio":flyerType==="schedule-en"?"English MNF Football Pool flyer with board, rules and schedule":flyerType==="schedule"?"Flier vertical de la Quiniela MNF con tablero, reglas y calendario":flyerType==="board-en"?"English MNF Football Pool original flyer":"Flier original de la Quiniela MNF"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>Compartir</button><button className="copy-button" onClick={copyFlyer}>Copiar imagen</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>Guardar PNG</button></div></section></div>}
     {showDigits && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowDigits(false)}><section className="modal digits-modal" role="dialog" aria-modal="true" aria-labelledby="digits-title"><button className="modal-close" onClick={() => setShowDigits(false)} aria-label="Cerrar">×</button><p className="kicker">Inicio de temporada</p><h3 id="digits-title">Números de juego</h3><p className="modal-help">Déjalos vacíos hasta el sorteo. Después, ingresa los 10 dígitos en el orden asignado.</p><label>Columnas — visitante<input value={visitorDigits} onChange={(e) => setVisitorDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 7451029863" /></label><label>Renglones — casa<input value={homeDigits} onChange={(e) => setHomeDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 0294831756" /></label><div className="modal-actions"><button className="secondary" onClick={() => {setVisitorDigits("");setHomeDigits("");}}>Limpiar</button><button className="primary" onClick={saveDigits} disabled={saving}>{saving ? "Guardando…" : "Guardar números"}</button></div></section></div>}
   </main>;
 }
@@ -491,8 +491,9 @@ async function createReportFlyer(rows:ReportRow[]){
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));return{blob,url:canvas.toDataURL("image/png")};
 }
 
-async function createFlyer(squares: Square[],language:"es"|"en"="es",season:SeasonConfig=defaultSeason) {
-  const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 3220;
+async function createFlyer(squares: Square[],language:"es"|"en"="es",season:SeasonConfig=defaultSeason,withSchedule=false) {
+  const flyerHeight=withSchedule?3220:1920;
+  const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = flyerHeight;
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas no disponible");
   const styles=getComputedStyle(document.body), displayFont=styles.getPropertyValue("--font-display").trim()||"Arial Black", bodyFont=styles.getPropertyValue("--font-body").trim()||"Arial";
   const navy = "#061b3e", gold = "#f7b500", green = "#168553", cream = "#fff8e5", white = "#ffffff";
@@ -506,11 +507,11 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
     legend:["DISPONIBLE","RESERVADA","PAGADA"],rulesTitle:"¡REGLAS CLARAS, DIVERSIÓN GRANDE!",rules:[`$${season.squarePrice} USD por casilla. ${season.paymentDeadline?`Pago total antes del ${formatPaymentDeadline(season.paymentDeadline,"es")}.`:"Fecha límite de pago por definir."}`,`$${season.gamePrize} USD por cada juego participante; tienes ${season.games.length} oportunidades de ganar.`,"Los números se sortean al inicio de temporada y permanecen ocultos hasta entonces.","Cuenta el marcador final, incluidos tiempos extra, usando la unidad de cada equipo."],exampleTitle:"EJEMPLO · MARCADOR FINAL",exampleCopy:"Visitante 17 y Casa 10: gana la casilla donde la columna 7 cruza con el renglón 0.",
     warning:"NO PAGADAS NO JUEGAN  •  SI GANA UNA NO VENDIDA, EL PREMIO QUEDA EN EL CLUB  •  SOLO JUEGOS LISTADOS",cta:"¡PARTICIPA HOY Y APOYA PROYECTOS QUE CAMBIAN VIDAS!"
   };
-  const [stadium,logo,mnfLogo,mottoEs,mottoEn] = await Promise.all([loadCanvasImage("/flyer-stadium-bg.png"),loadCanvasImage("/logo-crjc-white-gold.png"),loadCanvasImage("/logo-monday-night-football.png"),loadCanvasImage("/lema-rotario-2026-2027.png"),loadCanvasImage("/rotary-motto-2026-2027-en.png")]); ctx.drawImage(stadium,0,0,1080,3220);
-  const logoEntries=await Promise.all([...new Set(season.games.flatMap((game)=>[game.visitor,game.home]))].map(async(team)=>{const slug=teamLogoSlug(team);return [team,slug?await loadCanvasImage(`/nfl-logos/${slug}.png`):null] as const;}));const teamLogos=new Map(logoEntries);
-  const shade=ctx.createLinearGradient(0,0,0,3220);shade.addColorStop(0,"#020a1dcc");shade.addColorStop(.46,"#061b3e99");shade.addColorStop(.78,"#031128b8");shade.addColorStop(1,"#02091866");ctx.fillStyle=shade;ctx.fillRect(0,0,1080,3220);
+  const [stadium,logo,mnfLogo,mottoEs,mottoEn] = await Promise.all([loadCanvasImage("/flyer-stadium-bg.png"),loadCanvasImage("/logo-crjc-white-gold.png"),loadCanvasImage("/logo-monday-night-football.png"),loadCanvasImage("/lema-rotario-2026-2027.png"),loadCanvasImage("/rotary-motto-2026-2027-en.png")]); ctx.drawImage(stadium,0,0,1080,flyerHeight);
+  const logoEntries=withSchedule?await Promise.all([...new Set(season.games.flatMap((game)=>[game.visitor,game.home]))].map(async(team)=>{const slug=teamLogoSlug(team);return [team,slug?await loadCanvasImage(`/nfl-logos/${slug}.png`):null] as const;})):[];const teamLogos=new Map(logoEntries);
+  const shade=ctx.createLinearGradient(0,0,0,flyerHeight);shade.addColorStop(0,"#020a1dcc");shade.addColorStop(.46,"#061b3e99");shade.addColorStop(.78,"#031128b8");shade.addColorStop(1,"#02091866");ctx.fillStyle=shade;ctx.fillRect(0,0,1080,flyerHeight);
   ctx.save(); ctx.globalAlpha=.09; ctx.strokeStyle=gold; ctx.lineWidth=2; for(let y=34;y<780;y+=92){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1080,y);ctx.stroke();} ctx.restore();
-  ctx.fillStyle=gold; ctx.fillRect(0,0,1080,14); ctx.fillRect(0,3206,1080,14);
+  ctx.fillStyle=gold; ctx.fillRect(0,0,1080,14); ctx.fillRect(0,flyerHeight-14,1080,14);
 
   const logoW=420, logoH=logoW*(logo.height/logo.width); ctx.drawImage(logo,62,34,logoW,logoH);const mnfW=178,mnfH=mnfW*(mnfLogo.height/mnfLogo.width);ctx.drawImage(mnfLogo,840,28,mnfW,mnfH);
   ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font=`400 30px ${displayFont}`; ctx.fillText(copy.name,540,305);
@@ -526,6 +527,16 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
   roundedBox(ctx,122,608,836,830,26,"#03112be8",gold,4);
   ctx.fillStyle=gold;ctx.textAlign="center";ctx.font=`400 19px ${displayFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",542.5,626);ctx.save();ctx.translate(136,1022.5);ctx.rotate(-Math.PI/2);ctx.textBaseline="middle";ctx.fillText(english?"HOME":"CASA",0,0);ctx.restore();
   squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`400 29px ${displayFont}`;ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
+
+  if(!withSchedule){
+    ctx.textAlign="left";ctx.fillStyle=gold;canvasFontToFit(ctx,copy.rulesTitle,916,30,displayFont,22);ctx.fillText(copy.rulesTitle,82,1482);
+    const originalRules=copy.rules.map((text,index)=>[String(index+1),text]);
+    originalRules.forEach(([number,text],index)=>{const y=1522+index*42;ctx.font=`600 16px ${bodyFont}`;const lineCount=countWrappedTextLines(ctx,text,535),circleY=y-7+((lineCount-1)*18)/2;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,circleY,16,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font=`400 17px ${displayFont}`;ctx.fillText(number,100,circleY+6);ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`600 16px ${bodyFont}`;drawWrappedText(ctx,text,130,y,535,18);});
+    const originalMotto=english?mottoEn:mottoEs,originalMottoW=250,originalMottoH=originalMottoW*(originalMotto.height/originalMotto.width),originalMottoY=1511+(150-originalMottoH)/2;ctx.fillStyle=gold;ctx.fillRect(700,1505,3,158);roundedBox(ctx,725,1505,285,158,18,"#051631a8",null,0);ctx.drawImage(originalMotto,742,originalMottoY,originalMottoW,originalMottoH);
+    roundedBox(ctx,70,1680,940,126,20,"#071a3be8",gold,2);ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 18px ${displayFont}`;ctx.fillText(copy.exampleTitle,540,1708);ctx.fillStyle="#aebed3";ctx.font=`800 12px ${bodyFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",220,1742);ctx.fillText(english?"HOME":"CASA",860,1742);ctx.fillStyle=white;ctx.font=`400 38px ${displayFont}`;ctx.fillText("17",220,1777);ctx.fillText("10",860,1777);roundedBox(ctx,420,1726,240,55,12,gold,null,0);ctx.fillStyle=navy;ctx.font=`400 30px ${displayFont}`;ctx.fillText("7 × 0",540,1764);ctx.fillStyle=white;ctx.font=`600 15px ${bodyFont}`;ctx.fillText(copy.exampleCopy,540,1796);
+    ctx.fillStyle="#b8c7dc";ctx.textAlign="center";ctx.font=`800 15px ${bodyFont}`;ctx.fillText(copy.warning,540,1838);roundedBox(ctx,70,1860,940,42,13,gold,null,0);ctx.fillStyle=navy;ctx.font=`400 24px ${displayFont}`;ctx.fillText(copy.cta,540,1889);
+    const originalBlob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));return {blob:originalBlob,url:canvas.toDataURL("image/png")};
+  }
 
   ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 31px ${displayFont}`;ctx.fillText(english?"PARTICIPATING MNF GAMES":"JUEGOS MNF PARTICIPANTES",540,1492);
   roundedBox(ctx,70,1518,940,1045,24,"#03112be8",gold,3);
@@ -549,7 +560,7 @@ function canvasFontToFit(ctx:CanvasRenderingContext2D,text:string,maxWidth:numbe
 function loadCanvasImage(src:string){return new Promise<HTMLImageElement>((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error("No se pudo cargar el logo"));image.src=src;});}
 const TEAM_LOGO_SLUGS:Record<string,string>={"Denver Broncos":"den","Kansas City Chiefs":"kc","New York Giants":"nyg","Los Angeles Rams":"lar","Philadelphia Eagles":"phi","Chicago Bears":"chi","Atlanta Falcons":"atl","New Orleans Saints":"no","Buffalo Bills":"buf","Washington Commanders":"wsh","San Francisco 49ers":"sf","Dallas Cowboys":"dal","Seattle Seahawks":"sea","Minnesota Vikings":"min","Los Angeles Chargers":"lac","Baltimore Ravens":"bal","Cincinnati Bengals":"cin","Carolina Panthers":"car","Tampa Bay Buccaneers":"tb","Pittsburgh Steelers":"pit","Jacksonville Jaguars":"jax","New England Patriots":"ne","Detroit Lions":"det","Houston Texans":"hou","Green Bay Packers":"gb"};
 function teamLogoSlug(team:string){return TEAM_LOGO_SLUGS[team.trim()]??"";}
-function flyerFilename(type:FlyerType){return type==="winner"?"ganador-quiniela-mnf-2026.png":type==="report"?"avance-quiniela-mnf-2026.png":type==="board-en"?"mnf-football-pool-2026-en.png":"quiniela-mnf-2026.png";}
+function flyerFilename(type:FlyerType){return type==="winner"?"ganador-quiniela-mnf-2026.png":type==="report"?"avance-quiniela-mnf-2026.png":type==="schedule-en"?"mnf-football-pool-2026-games-en.png":type==="schedule"?"quiniela-mnf-2026-juegos.png":type==="board-en"?"mnf-football-pool-2026-en.png":"quiniela-mnf-2026.png";}
 function downloadFlyer(blob:Blob,type:FlyerType="board"){const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=flyerFilename(type);link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 function isOwned(square:Square,me:Member){ return Boolean(square.reservedByEmail) && square.reservedByEmail.toLowerCase()===me.email.toLowerCase(); }
