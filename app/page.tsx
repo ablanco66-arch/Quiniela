@@ -492,7 +492,7 @@ async function createReportFlyer(rows:ReportRow[]){
 }
 
 async function createFlyer(squares: Square[],language:"es"|"en"="es",season:SeasonConfig=defaultSeason,withSchedule=false) {
-  const flyerHeight=withSchedule?2700:1920;
+  const headerShift=withSchedule?-44:0,flyerHeight=withSchedule?2656:1920;
   const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = flyerHeight;
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas no disponible");
   const styles=getComputedStyle(document.body), displayFont=styles.getPropertyValue("--font-display").trim()||"Arial Black", bodyFont=styles.getPropertyValue("--font-body").trim()||"Arial";
@@ -514,18 +514,18 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
   ctx.fillStyle=gold; ctx.fillRect(0,0,1080,14); ctx.fillRect(0,flyerHeight-14,1080,14);
 
   const logoW=420, logoH=logoW*(logo.height/logo.width); ctx.drawImage(logo,62,34,logoW,logoH);const mnfW=178,mnfH=mnfW*(mnfLogo.height/mnfLogo.width);ctx.drawImage(mnfLogo,840,28,mnfW,mnfH);
-  ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font=`400 30px ${displayFont}`; ctx.fillText(copy.name,540,305);
-  ctx.fillStyle=white; ctx.font=`400 72px ${displayFont}`; ctx.fillText(copy.headline,540,382);
-  ctx.fillStyle=cream; ctx.font=`600 29px ${bodyFont}`; ctx.fillText(copy.intro,540,430);
+  ctx.textAlign="center"; ctx.fillStyle=gold; ctx.font=`400 30px ${displayFont}`; ctx.fillText(copy.name,540,305+headerShift);
+  ctx.fillStyle=white; ctx.font=`400 72px ${displayFont}`; ctx.fillText(copy.headline,540,382+headerShift);
+  ctx.fillStyle=cream; ctx.font=`600 29px ${bodyFont}`; ctx.fillText(copy.intro,540,430+headerShift);
 
-  roundedBox(ctx,48,466,984,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; canvasFontToFit(ctx,copy.offer,920,27,displayFont,20); ctx.fillText(copy.offer,540,518);
+  roundedBox(ctx,48,466+headerShift,984,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; canvasFontToFit(ctx,copy.offer,920,27,displayFont,20); ctx.fillText(copy.offer,540,518+headerShift);
 
   const legend=[{label:copy.legend[0],color:cream,text:navy},{label:copy.legend[1],color:gold,text:navy},{label:copy.legend[2],color:green,text:white}];
-  ctx.textAlign="left"; legend.forEach((item,index)=>{ctx.font=`400 22px ${displayFont}`;const sectionCenter=122+(index+.5)*(836/3),groupWidth=24+10+ctx.measureText(item.label).width,lx=sectionCenter-groupWidth/2;ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.fillText(item.label,lx+34,596);});
+  ctx.textAlign="left"; legend.forEach((item,index)=>{ctx.font=`400 22px ${displayFont}`;const sectionCenter=122+(index+.5)*(836/3),groupWidth=24+10+ctx.measureText(item.label).width,lx=sectionCenter-groupWidth/2;ctx.fillStyle=item.color;ctx.fillRect(lx,575+headerShift,24,24);ctx.fillStyle=white;ctx.fillText(item.label,lx+34,596+headerShift);});
 
-  const gridX=150, gridY=630, cell=74, gap=5;
-  roundedBox(ctx,122,608,836,830,26,"#03112be8",gold,4);
-  ctx.fillStyle=gold;ctx.textAlign="center";ctx.font=`400 19px ${displayFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",542.5,626);ctx.save();ctx.translate(136,1022.5);ctx.rotate(-Math.PI/2);ctx.textBaseline="middle";ctx.fillText(english?"HOME":"CASA",0,0);ctx.restore();
+  const gridX=150, gridY=630+headerShift, cell=74, gap=5;
+  roundedBox(ctx,122,608+headerShift,836,830,26,"#03112be8",gold,4);
+  ctx.fillStyle=gold;ctx.textAlign="center";ctx.font=`400 19px ${displayFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",542.5,626+headerShift);ctx.save();ctx.translate(136,1022.5+headerShift);ctx.rotate(-Math.PI/2);ctx.textBaseline="middle";ctx.fillText(english?"HOME":"CASA",0,0);ctx.restore();
   squares.forEach((square,index)=>{const col=index%10,row=Math.floor(index/10),x=gridX+col*(cell+gap),y=gridY+row*(cell+gap);ctx.fillStyle=square.status==="paid"?green:square.status==="reserved"?gold:cream;ctx.fillRect(x,y,cell,cell);ctx.strokeStyle=square.status==="available"?"#c5c9cf":"#ffffff44";ctx.lineWidth=2;ctx.strokeRect(x,y,cell,cell);ctx.fillStyle=square.status==="paid"?white:navy;ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`400 29px ${displayFont}`;ctx.fillText(String(square.id),x+cell/2,y+cell/2+1);}); ctx.textBaseline="alphabetic";
 
   if(!withSchedule){
@@ -538,17 +538,17 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
     const originalBlob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));return {blob:originalBlob,url:canvas.toDataURL("image/png")};
   }
 
-  ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 31px ${displayFont}`;ctx.fillText(english?"PARTICIPATING MNF GAMES":"JUEGOS MNF PARTICIPANTES",540,1492);
-  roundedBox(ctx,70,1518,940,535,24,"#03112be8",gold,3);
-  ctx.strokeStyle="#f7b50066";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(540,1540);ctx.lineTo(540,2028);ctx.stroke();
-  season.games.forEach((game,index)=>{const column=index<9?0:1,row=index<9?index:index-9,x=92+column*476,y=1540+row*56;if(row%2===0){ctx.fillStyle="#ffffff12";ctx.fillRect(x,y,416,51);}ctx.textBaseline="middle";ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 19px ${displayFont}`;ctx.fillText(String(index+1).padStart(2,"0"),x+28,y+25);ctx.fillStyle=white;ctx.font=`800 17px ${bodyFont}`;ctx.fillText(game.date.toUpperCase(),x+105,y+25);const visitorLogo=teamLogos.get(game.visitor),homeLogo=teamLogos.get(game.home);if(visitorLogo)ctx.drawImage(visitorLogo,x+202,y+1,49,49);if(homeLogo)ctx.drawImage(homeLogo,x+330,y+1,49,49);ctx.fillStyle=gold;ctx.font=`400 22px ${displayFont}`;ctx.fillText("@",x+291,y+25);});ctx.textBaseline="alphabetic";
+  ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 31px ${displayFont}`;ctx.fillText(english?"PARTICIPATING MNF GAMES":"JUEGOS MNF PARTICIPANTES",540,1492+headerShift);
+  roundedBox(ctx,70,1518+headerShift,940,535,24,"#03112be8",gold,3);
+  ctx.strokeStyle="#f7b50066";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(540,1540+headerShift);ctx.lineTo(540,2028+headerShift);ctx.stroke();
+  season.games.forEach((game,index)=>{const column=index<9?0:1,row=index<9?index:index-9,x=92+column*476,y=1540+headerShift+row*56;if(row%2===0){ctx.fillStyle="#ffffff12";ctx.fillRect(x,y,416,51);}ctx.textBaseline="middle";ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 19px ${displayFont}`;ctx.fillText(String(index+1).padStart(2,"0"),x+28,y+25);ctx.fillStyle=white;ctx.font=`800 17px ${bodyFont}`;ctx.fillText(game.date.toUpperCase(),x+105,y+25);const visitorLogo=teamLogos.get(game.visitor),homeLogo=teamLogos.get(game.home);if(visitorLogo)ctx.drawImage(visitorLogo,x+202,y+1,49,49);if(homeLogo)ctx.drawImage(homeLogo,x+330,y+1,49,49);ctx.fillStyle=gold;ctx.font=`400 22px ${displayFont}`;ctx.fillText("@",x+291,y+25);});ctx.textBaseline="alphabetic";
 
-  ctx.textAlign="left"; ctx.fillStyle=gold;canvasFontToFit(ctx,copy.rulesTitle,916,30,displayFont,22);ctx.fillText(copy.rulesTitle,82,2107);
+  ctx.textAlign="left"; ctx.fillStyle=gold;canvasFontToFit(ctx,copy.rulesTitle,916,30,displayFont,22);ctx.fillText(copy.rulesTitle,82,2107+headerShift);
   const rules=copy.rules.map((text,index)=>[String(index+1),text]);
-  rules.forEach(([number,text],index)=>{const y=2147+index*42;ctx.font=`700 18px ${bodyFont}`;const lineCount=countWrappedTextLines(ctx,text,535),circleY=y-7+((lineCount-1)*20)/2;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,circleY,17,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font=`400 18px ${displayFont}`;ctx.fillText(number,100,circleY+6);ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`700 18px ${bodyFont}`;drawWrappedText(ctx,text,130,y,535,20);});const motto=english?mottoEn:mottoEs,mottoW=250,mottoH=mottoW*(motto.height/motto.width),mottoY=2136+(150-mottoH)/2;ctx.fillStyle=gold;ctx.fillRect(700,2130,3,158);roundedBox(ctx,725,2130,285,158,18,"#051631a8",null,0);ctx.drawImage(motto,742,mottoY,mottoW,mottoH);
-  roundedBox(ctx,70,2305,940,126,20,"#071a3be8",gold,2);ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 21px ${displayFont}`;ctx.fillText(copy.exampleTitle,540,2333);ctx.fillStyle="#d7e1ee";ctx.font=`800 15px ${bodyFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",220,2367);ctx.fillText(english?"HOME":"CASA",860,2367);ctx.fillStyle=white;ctx.font=`400 42px ${displayFont}`;ctx.fillText("17",220,2402);ctx.fillText("10",860,2402);roundedBox(ctx,420,2351,240,55,12,gold,null,0);ctx.fillStyle=navy;ctx.font=`400 32px ${displayFont}`;ctx.fillText("7 × 0",540,2389);ctx.fillStyle=white;canvasFontToFit(ctx,copy.exampleCopy,900,18,bodyFont,15);ctx.fillText(copy.exampleCopy,540,2421);
-  ctx.fillStyle="#e3e9f2";ctx.textAlign="center";canvasFontToFit(ctx,copy.warning,940,18,bodyFont,14);ctx.fillText(copy.warning,540,2475);
-  roundedBox(ctx,70,2510,940,126,20,"#071a3be8",gold,3);ctx.fillStyle=white;canvasFontToFit(ctx,copy.cta,880,30,displayFont,22);ctx.fillText(copy.cta,540,2552);ctx.fillStyle=gold;ctx.font=`800 21px ${bodyFont}`;ctx.fillText(english?"GET YOUR SQUARE TODAY":"APARTA TU CASILLA HOY",540,2595);
+  rules.forEach(([number,text],index)=>{const y=2147+headerShift+index*42;ctx.font=`700 18px ${bodyFont}`;const lineCount=countWrappedTextLines(ctx,text,535),circleY=y-7+((lineCount-1)*20)/2;ctx.fillStyle=gold;ctx.beginPath();ctx.arc(100,circleY,17,0,Math.PI*2);ctx.fill();ctx.fillStyle=navy;ctx.textAlign="center";ctx.font=`400 18px ${displayFont}`;ctx.fillText(number,100,circleY+6);ctx.fillStyle=white;ctx.textAlign="left";ctx.font=`700 18px ${bodyFont}`;drawWrappedText(ctx,text,130,y,535,20);});const motto=english?mottoEn:mottoEs,mottoW=250,mottoH=mottoW*(motto.height/motto.width),mottoY=2136+headerShift+(150-mottoH)/2;ctx.fillStyle=gold;ctx.fillRect(700,2130+headerShift,3,158);roundedBox(ctx,725,2130+headerShift,285,158,18,"#051631a8",null,0);ctx.drawImage(motto,742,mottoY,mottoW,mottoH);
+  roundedBox(ctx,70,2305+headerShift,940,126,20,"#071a3be8",gold,2);ctx.textAlign="center";ctx.fillStyle=gold;ctx.font=`400 21px ${displayFont}`;ctx.fillText(copy.exampleTitle,540,2333+headerShift);ctx.fillStyle="#d7e1ee";ctx.font=`800 15px ${bodyFont}`;ctx.fillText(english?"VISITOR":"VISITANTE",220,2367+headerShift);ctx.fillText(english?"HOME":"CASA",860,2367+headerShift);ctx.fillStyle=white;ctx.font=`400 42px ${displayFont}`;ctx.fillText("17",220,2402+headerShift);ctx.fillText("10",860,2402+headerShift);roundedBox(ctx,420,2351+headerShift,240,55,12,gold,null,0);ctx.fillStyle=navy;ctx.font=`400 32px ${displayFont}`;ctx.fillText("7 × 0",540,2389+headerShift);ctx.fillStyle=white;canvasFontToFit(ctx,copy.exampleCopy,900,18,bodyFont,15);ctx.fillText(copy.exampleCopy,540,2421+headerShift);
+  ctx.fillStyle="#e3e9f2";ctx.textAlign="center";canvasFontToFit(ctx,copy.warning,940,18,bodyFont,14);ctx.fillText(copy.warning,540,2475+headerShift);
+  roundedBox(ctx,70,2510+headerShift,940,126,20,"#071a3be8",gold,3);ctx.fillStyle=white;canvasFontToFit(ctx,copy.cta,880,30,displayFont,22);ctx.fillText(copy.cta,540,2552+headerShift);ctx.fillStyle=gold;ctx.font=`800 21px ${bodyFont}`;ctx.fillText(english?"GET YOUR SQUARE TODAY":"APARTA TU CASILLA HOY",540,2595+headerShift);
   const blob = await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));
   return { blob, url:canvas.toDataURL("image/png") };
 }
