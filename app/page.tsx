@@ -518,7 +518,7 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
   ctx.fillStyle=white; ctx.font=`400 72px ${displayFont}`; ctx.fillText(copy.headline,540,382);
   ctx.fillStyle=cream; ctx.font=`600 29px ${bodyFont}`; ctx.fillText(copy.intro,540,430);
 
-  roundedBox(ctx,80,466,920,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; ctx.font=`400 27px ${displayFont}`; ctx.fillText(copy.offer,540,518);
+  roundedBox(ctx,48,466,984,82,18,"#071a3bdd",gold,3); ctx.fillStyle=white; canvasFontToFit(ctx,copy.offer,920,27,displayFont,20); ctx.fillText(copy.offer,540,518);
 
   const legend=[{label:copy.legend[0],color:cream,text:navy},{label:copy.legend[1],color:gold,text:navy},{label:copy.legend[2],color:green,text:white}];
   ctx.textAlign="left"; legend.forEach((item,index)=>{ctx.font=`400 22px ${displayFont}`;const sectionCenter=122+(index+.5)*(836/3),groupWidth=24+10+ctx.measureText(item.label).width,lx=sectionCenter-groupWidth/2;ctx.fillStyle=item.color;ctx.fillRect(lx,575,24,24);ctx.fillStyle=white;ctx.fillText(item.label,lx+34,596);});
