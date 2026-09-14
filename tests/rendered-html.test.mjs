@@ -65,6 +65,7 @@ test("square notes are an immutable history after a 20 minute edit window", asyn
   assert.match(page, /"note_create" \| "note_update" \| "note_delete"/);
   assert.match(page, /useState<"desc"\|"asc">\("desc"\)/);
   assert.match(page, /Bitácora de notas/);
+  assert.match(page, /Nota No\. \{noteNumbers\.get\(note\.id\)\} \/ \{notes\.length\}/);
   assert.match(page, /maxLength=\{2000\}/);
   assert.doesNotMatch(page, /Teléfono|draft\.phone/);
   assert.match(boardApi, /unixepoch\(created_at\) \+ 1200/);
