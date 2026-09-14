@@ -64,6 +64,13 @@
       "when": 1789353535047,
       "tag": "0008_aromatic_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789355367764,
+      "tag": "0009_faulty_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

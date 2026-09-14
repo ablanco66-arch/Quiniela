@@ -52,22 +52,25 @@ test("treasury status is persisted, restricted and rendered in blue", async () =
   assert.match(page, /\[510,652,787,925\]\.forEach/);
 });
 
-test("square notes replace the phone field and persist as long optional text", async () => {
+test("square notes are an immutable history after a 20 minute edit window", async () => {
   const [page, boardApi, styles, schema, migration] = await Promise.all([
     read("app/page.tsx"),
     read("app/api/board/route.ts"),
     read("app/globals.css"),
     read("db/schema.ts"),
-    read("drizzle/0008_aromatic_butterfly.sql"),
+    read("drizzle/0009_faulty_goblin_queen.sql"),
   ]);
 
-  assert.match(page, /contact: string; notes: string/);
-  assert.match(page, /<label>Notas <span>\(opcional\)<\/span><textarea/);
+  assert.match(page, /type SquareNote = \{[^}]*status:Status; authorEmail:string; authorName:string; createdAt:string; updatedAt:string; editableUntil:string/);
+  assert.match(page, /"note_create" \| "note_update" \| "note_delete"/);
+  assert.match(page, /useState<"desc"\|"asc">\("desc"\)/);
+  assert.match(page, /Bitácora de notas/);
   assert.match(page, /maxLength=\{2000\}/);
   assert.doesNotMatch(page, /Teléfono|draft\.phone/);
-  assert.match(boardApi, /ALTER TABLE squares ADD COLUMN notes TEXT NOT NULL DEFAULT ''/);
-  assert.match(boardApi, /payload\.notes[\s\S]*slice\(0, 2000\)/);
-  assert.match(styles, /\.readonly-data \.readonly-notes[^}]*white-space:pre-wrap/);
-  assert.match(schema, /notes: text\("notes"\)/);
-  assert.match(migration, /ADD `notes` text DEFAULT '' NOT NULL/);
+  assert.match(boardApi, /unixepoch\(created_at\) \+ 1200/);
+  assert.match(boardApi, /note\.authorEmail !== actor\.email/);
+  assert.match(boardApi, /INSERT INTO square_notes[^\n]+square\.status, actor\.email, actor\.name/);
+  assert.match(styles, /\.note-list \{[^}]*max-height:276px;overflow-y:auto/);
+  assert.match(schema, /export const squareNotes = sqliteTable\("square_notes"/);
+  assert.match(migration, /CREATE TABLE `square_notes`/);
 });

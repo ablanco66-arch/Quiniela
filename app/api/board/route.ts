@@ -10,6 +10,7 @@ type SeasonConfig = { name: string; squarePrice: number; gamePrize: number; paym
 const INITIAL_ADMIN_EMAIL = "ablanco66@gmail.com";
 const INITIAL_ADMIN_NAME = "Andrés Blanco";
 const MEMBER_LIST_SQL = "SELECT email, name, role, active, COALESCE(username, '') AS username, approval_status AS approvalStatus, must_change_password AS mustChangePassword FROM members ORDER BY CASE approval_status WHEN 'pending' THEN 0 ELSE 1 END, name, email";
+const NOTE_FIELDS = `id, square_id AS squareId, text, status, author_email AS authorEmail, author_name AS authorName, strftime('%Y-%m-%dT%H:%M:%SZ', created_at) AS createdAt, strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) AS updatedAt, strftime('%Y-%m-%dT%H:%M:%SZ', datetime(created_at, '+20 minutes')) AS editableUntil`;
 const DEFAULT_GAMES: Game[] = [
   { date:"14 sep", visitor:"Denver Broncos", home:"Kansas City Chiefs" }, { date:"21 sep", visitor:"New York Giants", home:"Los Angeles Rams" },
   { date:"28 sep", visitor:"Philadelphia Eagles", home:"Chicago Bears" }, { date:"5 oct", visitor:"Atlanta Falcons", home:"New Orleans Saints" },
@@ -31,6 +32,8 @@ async function ensureDatabase() {
   await ensureLocalAuthSchema();
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS squares (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'available', participant TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', reserved_by_email TEXT NOT NULL DEFAULT '', reserved_by_name TEXT NOT NULL DEFAULT '', reserved_at TEXT NOT NULL DEFAULT '', paid_by_email TEXT NOT NULL DEFAULT '', paid_by_name TEXT NOT NULL DEFAULT '', paid_at TEXT NOT NULL DEFAULT '', treasury_by_email TEXT NOT NULL DEFAULT '', treasury_by_name TEXT NOT NULL DEFAULT '', treasury_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS square_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, square_id INTEGER NOT NULL, season_name TEXT NOT NULL, text TEXT NOT NULL, status TEXT NOT NULL, author_email TEXT NOT NULL, author_name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS square_notes_season_square_created_idx ON square_notes (season_name, square_id, created_at, id)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', season_name TEXT NOT NULL DEFAULT '2026', square_price INTEGER NOT NULL DEFAULT 100, game_prize INTEGER NOT NULL DEFAULT 300, payment_deadline TEXT NOT NULL DEFAULT '2026-09-14', games_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, square_id INTEGER, action TEXT NOT NULL, actor_email TEXT NOT NULL, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, previous_status TEXT NOT NULL DEFAULT '', new_status TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS activity_created_id_idx ON activity (created_at DESC, id DESC)`),
@@ -87,6 +90,8 @@ async function ensureDatabase() {
     db.prepare(`UPDATE squares SET reserved_by_name = CASE WHEN instr(contact, ' · ') > 0 THEN trim(substr(contact, 1, instr(contact, ' · ') - 1)) ELSE trim(contact) END, reserved_at = CASE WHEN reserved_at = '' THEN updated_at ELSE reserved_at END WHERE status <> 'available' AND reserved_by_name = ''`),
     db.prepare(`UPDATE squares SET reserved_by_name = CASE reserved_by_name WHEN 'JC Olivares' THEN 'Juan Carlos Olivares' WHEN 'Cabi Flores' THEN 'Cabiria Flores' ELSE reserved_by_name END WHERE reserved_by_name IN ('JC Olivares', 'Cabi Flores')`),
     db.prepare(`UPDATE squares SET paid_by_name = 'Registro inicial', paid_at = CASE WHEN paid_at = '' THEN updated_at ELSE paid_at END WHERE status = 'paid' AND paid_by_name = ''`),
+    db.prepare(`INSERT INTO square_notes (square_id, season_name, text, status, author_email, author_name, created_at, updated_at) SELECT squares.id, settings.season_name, squares.notes, squares.status, 'system:legacy-notes', 'Registro anterior', squares.updated_at, squares.updated_at FROM squares CROSS JOIN settings WHERE settings.id = 1 AND trim(squares.notes) <> '' AND NOT EXISTS (SELECT 1 FROM square_notes WHERE square_notes.square_id = squares.id AND square_notes.author_email = 'system:legacy-notes')`),
+    db.prepare(`UPDATE squares SET notes = '' WHERE trim(notes) <> ''`),
   ]);
 }
 
@@ -108,7 +113,7 @@ export async function GET(request: Request) {
     const actor = await getActor(request);
     if (actor instanceof Response) return actor;
     const [squareResult, settings, memberResult, activityResult, gameResult, archiveResult] = await Promise.all([
-      env.DB.prepare(`SELECT id, status, participant, contact, notes, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares ORDER BY id`).all(),
+      env.DB.prepare(`SELECT id, status, participant, contact, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares ORDER BY id`).all(),
       env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, payment_deadline AS paymentDeadline, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>(),
       actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
       actor.role === "admin" ? env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY created_at DESC, id DESC LIMIT 60").all() : Promise.resolve({ results: [] }),
@@ -117,8 +122,9 @@ export async function GET(request: Request) {
     ]);
     const games = parseGames(String(settings?.gamesJson ?? ""));
     const season = { name:String(settings?.seasonName ?? "2026"), squarePrice:Number(settings?.squarePrice ?? 100), gamePrize:Number(settings?.gamePrize ?? 300), paymentDeadline:String(settings?.paymentDeadline ?? "2026-09-14"), games };
+    const noteResult = await env.DB.prepare(`SELECT ${NOTE_FIELDS} FROM square_notes WHERE season_name = ? ORDER BY created_at DESC, id DESC`).bind(season.name).all();
     const archives = (archiveResult.results as Array<Record<string, unknown>>).map((item) => ({ id:item.id, seasonName:item.seasonName, squarePrice:item.squarePrice, gamePrize:item.gamePrize, archivedAt:item.archivedAt, gameCount:parseGames(String(item.gamesJson ?? "")).length }));
-    return Response.json({ squares: squareResult.results, settings:{ visitorDigits:settings?.visitorDigits ?? "", homeDigits:settings?.homeDigits ?? "" }, season, archives, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
+    return Response.json({ squares: squareResult.results, notes:noteResult.results, settings:{ visitorDigits:settings?.visitorDigits ?? "", homeDigits:settings?.homeDigits ?? "" }, season, archives, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "No fue posible cargar el tablero" }, { status: 500 });
   }
@@ -294,11 +300,43 @@ export async function PUT(request: Request) {
       return Response.json({ members: members.results });
     }
 
+    if (["note_create", "note_update", "note_delete"].includes(String(payload.action))) {
+      const squareId = Number(payload.squareId);
+      if (!Number.isInteger(squareId) || squareId < 1 || squareId > 100) return Response.json({ error:"Casilla inválida" }, { status:400 });
+      const [square, settings] = await Promise.all([
+        env.DB.prepare("SELECT id, status FROM squares WHERE id = ?").bind(squareId).first<{id:number;status:string}>(),
+        env.DB.prepare("SELECT season_name AS seasonName FROM settings WHERE id = 1").first<{seasonName:string}>(),
+      ]);
+      if (!square) return Response.json({ error:"Casilla no encontrada" }, { status:404 });
+      const seasonName = String(settings?.seasonName ?? "2026");
+      if (payload.action === "note_create") {
+        const noteText = String(payload.text ?? "").trim().slice(0, 2000);
+        if (!noteText) return Response.json({ error:"Escribe el texto de la nota" }, { status:400 });
+        await env.DB.prepare("INSERT INTO square_notes (square_id, season_name, text, status, author_email, author_name) VALUES (?, ?, ?, ?, ?, ?)").bind(squareId, seasonName, noteText, square.status, actor.email, actor.name).run();
+      } else {
+        const noteId = Number(payload.noteId);
+        if (!Number.isInteger(noteId) || noteId < 1) return Response.json({ error:"Nota inválida" }, { status:400 });
+        const note = await env.DB.prepare("SELECT id, author_email AS authorEmail, CASE WHEN unixepoch('now') <= unixepoch(created_at) + 1200 THEN 1 ELSE 0 END AS editable FROM square_notes WHERE id = ? AND square_id = ? AND season_name = ?").bind(noteId, squareId, seasonName).first<{id:number;authorEmail:string;editable:number}>();
+        if (!note) return Response.json({ error:"Nota no encontrada" }, { status:404 });
+        if (note.authorEmail !== actor.email) return forbidden("Sólo quien agregó la nota puede modificarla");
+        if (!note.editable) return Response.json({ error:"El periodo de 20 minutos para modificar esta nota ya terminó" }, { status:409 });
+        if (payload.action === "note_update") {
+          const noteText = String(payload.text ?? "").trim().slice(0, 2000);
+          if (!noteText) return Response.json({ error:"La nota no puede quedar vacía" }, { status:400 });
+          await env.DB.prepare("UPDATE square_notes SET text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(noteText, noteId).run();
+        } else {
+          await env.DB.prepare("DELETE FROM square_notes WHERE id = ?").bind(noteId).run();
+        }
+      }
+      const notes = await env.DB.prepare(`SELECT ${NOTE_FIELDS} FROM square_notes WHERE square_id = ? AND season_name = ? ORDER BY created_at DESC, id DESC`).bind(squareId, seasonName).all();
+      return Response.json({ notes:notes.results });
+    }
+
     if (payload.action !== "square") return Response.json({ error: "Acción inválida" }, { status: 400 });
     const id = Number(payload.id);
     const requestedStatus = String(payload.status ?? "");
     if (!Number.isInteger(id) || id < 1 || id > 100 || !["available", "reserved", "paid", "treasury"].includes(requestedStatus)) return Response.json({ error: "Datos inválidos" }, { status: 400 });
-    const current = await env.DB.prepare(`SELECT id, status, participant, contact, notes, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares WHERE id = ?`).bind(id).first<Record<string, string | number>>();
+    const current = await env.DB.prepare(`SELECT id, status, participant, contact, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares WHERE id = ?`).bind(id).first<Record<string, string | number>>();
     if (!current) return Response.json({ error: "Casilla no encontrada" }, { status: 404 });
     const settings = await env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first<{visitorDigits:string;homeDigits:string}>();
     const boardLocked = validDigits(String(settings?.visitorDigits ?? "")) && validDigits(String(settings?.homeDigits ?? ""));
@@ -311,7 +349,6 @@ export async function PUT(request: Request) {
     if (!canChangeSquare(actor.role, String(current.status), requestedStatus, owns)) return forbidden("No puedes modificar una casilla vendida por otro socio");
 
     let participant = String(payload.participant ?? "").trim();
-    let notes = String(payload.notes ?? "").trim().slice(0, 2000);
     let reservedByEmail = String(current.reservedByEmail ?? "");
     let reservedByName = String(current.reservedByName ?? "");
     let reservedAt = String(current.reservedAt ?? "");
@@ -324,10 +361,9 @@ export async function PUT(request: Request) {
 
     if (treasuryStatusOnly) {
       participant = String(current.participant ?? "");
-      notes = String(current.notes ?? "");
     }
     if (requestedStatus === "available") {
-      participant = notes = reservedByEmail = reservedByName = reservedAt = paidByEmail = paidByName = paidAt = treasuryByEmail = treasuryByName = treasuryAt = "";
+      participant = reservedByEmail = reservedByName = reservedAt = paidByEmail = paidByName = paidAt = treasuryByEmail = treasuryByName = treasuryAt = "";
     } else {
       if (!participant) return Response.json({ error: "El nombre de quien juega es obligatorio" }, { status: 400 });
       if (current.status === "available") {
@@ -359,10 +395,10 @@ export async function PUT(request: Request) {
 
     const action = current.status === "available" && requestedStatus === "reserved" ? "reserved" : requestedStatus === "treasury" && current.status !== "treasury" ? "treasury" : requestedStatus === "paid" && current.status !== "paid" ? "paid" : requestedStatus === "available" ? "released" : "updated";
     await env.DB.batch([
-      env.DB.prepare(`UPDATE squares SET status = ?, participant = ?, contact = ?, notes = ?, reserved_by_email = ?, reserved_by_name = ?, reserved_at = ?, paid_by_email = ?, paid_by_name = ?, paid_at = ?, treasury_by_email = ?, treasury_by_name = ?, treasury_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(requestedStatus, participant, reservedByName, notes, reservedByEmail, reservedByName, reservedAt, paidByEmail, paidByName, paidAt, treasuryByEmail, treasuryByName, treasuryAt, id),
+      env.DB.prepare(`UPDATE squares SET status = ?, participant = ?, contact = ?, reserved_by_email = ?, reserved_by_name = ?, reserved_at = ?, paid_by_email = ?, paid_by_name = ?, paid_at = ?, treasury_by_email = ?, treasury_by_name = ?, treasury_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(requestedStatus, participant, reservedByName, reservedByEmail, reservedByName, reservedAt, paidByEmail, paidByName, paidAt, treasuryByEmail, treasuryByName, treasuryAt, id),
       activity(actor, id, action, String(current.status), requestedStatus, participant),
     ]);
-    const square = await env.DB.prepare(`SELECT id, status, participant, contact, notes, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares WHERE id = ?`).bind(id).first();
+    const square = await env.DB.prepare(`SELECT id, status, participant, contact, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares WHERE id = ?`).bind(id).first();
     return Response.json({ square });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "No fue posible guardar" }, { status: 500 });

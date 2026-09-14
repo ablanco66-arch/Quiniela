@@ -17,6 +17,18 @@ export const squares = sqliteTable("squares", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const squareNotes = sqliteTable("square_notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  squareId: integer("square_id").notNull(),
+  seasonName: text("season_name").notNull(),
+  text: text("text").notNull(),
+  status: text("status").notNull(),
+  authorEmail: text("author_email").notNull(),
+  authorName: text("author_name").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("square_notes_season_square_created_idx").on(table.seasonName, table.squareId, table.createdAt, table.id)]);
+
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   visitorDigits: text("visitor_digits").notNull().default(""),

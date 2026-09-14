@@ -6,11 +6,13 @@ type Status = "available" | "reserved" | "paid" | "treasury";
 type Role = "admin" | "user" | "treasury";
 type FlyerType = "board" | "board-en" | "schedule" | "schedule-en" | "report" | "payment" | "payment-en" | "winner";
 type Square = {
-  id: number; status: Status; participant: string; contact: string; notes: string;
+  id: number; status: Status; participant: string; contact: string;
   reservedByEmail: string; reservedByName: string; reservedAt: string;
   paidByEmail: string; paidByName: string; paidAt: string;
   treasuryByEmail: string; treasuryByName: string; treasuryAt: string;
 };
+type SquareNote = { id:number; squareId:number; text:string; status:Status; authorEmail:string; authorName:string; createdAt:string; updatedAt:string; editableUntil:string };
+type NoteAction = "note_create" | "note_update" | "note_delete";
 type Member = { email: string; name: string; role: Role; active: number; username?: string; tempPassword?: string; mustChangePassword?: boolean; approvalStatus?: "pending" | "approved" | "suspended"; authProvider?: "local" | "chatgpt" };
 type Activity = { id: number; squareId: number | null; action: string; actorName: string; actorRole: Role; previousStatus: string; newStatus: string; details: string; createdAt: string };
 type Game = { date: string; visitor: string; home: string };
@@ -35,7 +37,7 @@ const defaultGames: Game[] = [
 ];
 const defaultSeason:SeasonConfig={name:"2026",squarePrice:100,gamePrize:300,paymentDeadline:"2026-09-14",games:defaultGames};
 
-const emptySquares: Square[] = Array.from({ length: 100 }, (_, index) => ({ id:index + 1, status:"available", participant:"", contact:"", notes:"", reservedByEmail:"", reservedByName:"", reservedAt:"", paidByEmail:"", paidByName:"", paidAt:"", treasuryByEmail:"", treasuryByName:"", treasuryAt:"" }));
+const emptySquares: Square[] = Array.from({ length: 100 }, (_, index) => ({ id:index + 1, status:"available", participant:"", contact:"", reservedByEmail:"", reservedByName:"", reservedAt:"", paidByEmail:"", paidByName:"", paidAt:"", treasuryByEmail:"", treasuryByName:"", treasuryAt:"" }));
 const PASSWORD_PATTERN = "(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,128}";
 const PASSWORD_HINT = "Mínimo 8 caracteres con minúscula, mayúscula, número y símbolo especial.";
 
@@ -57,6 +59,7 @@ export default function Home() {
   const [me, setMe] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [squareNotes, setSquareNotes] = useState<SquareNote[]>([]);
   const [gameResults, setGameResults] = useState<GameResult[]>([]);
   const [season,setSeason] = useState<SeasonConfig>(defaultSeason);
   const [seasonArchives,setSeasonArchives] = useState<SeasonArchive[]>([]);
@@ -73,7 +76,7 @@ export default function Home() {
       if (response.status === 428 && data.code === "PASSWORD_CHANGE_REQUIRED") { setAccessState("password"); return null; }
       if (response.status === 403) { setAccessEmail(data.email ?? ""); setAccessState("denied"); return null; }
       if (!response.ok) throw new Error(data.error || "No fue posible cargar el tablero");
-      setSquares(data.squares); setVisitorDigits(data.settings.visitorDigits ?? ""); setHomeDigits(data.settings.homeDigits ?? ""); setSeason(data.season??defaultSeason); setSeasonArchives(data.archives??[]);
+      setSquares(data.squares); setSquareNotes(data.notes??[]); setVisitorDigits(data.settings.visitorDigits ?? ""); setHomeDigits(data.settings.homeDigits ?? ""); setSeason(data.season??defaultSeason); setSeasonArchives(data.archives??[]);
       setMe(data.me); setMembers(data.members ?? []); setActivity(data.activity ?? []); setGameResults(data.gameResults ?? []); setAccessState("ready");
       return data.squares as Square[];
     } catch (error) { setNotice(error instanceof Error ? error.message : "No pudimos conectar con el tablero."); return null; }
@@ -98,6 +101,17 @@ export default function Home() {
       setSquares((current) => current.map((item) => item.id === data.square.id ? data.square : item)); setSelected(null);
       setNotice(`Casilla ${square.id} actualizada`); await loadBoard();
     } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo guardar el cambio."); }
+    finally { setSaving(false); }
+  }
+
+  async function mutateSquareNote(action:NoteAction,squareId:number,text="",noteId?:number) {
+    setSaving(true);
+    try {
+      const data=await put({action,squareId,text,noteId});
+      setSquareNotes((current)=>[...current.filter((note)=>note.squareId!==squareId),...(data.notes??[])]);
+      setNotice(action==="note_create"?`Nota agregada a la casilla ${squareId}`:action==="note_update"?"Nota actualizada":"Nota eliminada");
+      return true;
+    } catch(error) { setNotice(error instanceof Error?error.message:"No se pudo actualizar la bitácora"); return false; }
     finally { setSaving(false); }
   }
 
@@ -301,7 +315,7 @@ export default function Home() {
 
     <footer><div className="footer-logo-wrap"><img className="club-logo footer-logo" src="/logo-crjc-white-gold.png" alt="Rotary Juárez Concordia" /></div><img className="footer-motto" src="/lema-rotario-2026-2027.png" alt="Genera un impacto duradero" /><span>Actualizado 13 julio 2026</span></footer>
 
-    {selected && <SquareModal square={selected} me={me!} members={members} saving={saving} boardLocked={boardLocked} visitorDigits={visitorDigits} homeDigits={homeDigits} onClose={() => setSelected(null)} onSave={saveSquare} />}
+    {selected && <SquareModal square={selected} notes={squareNotes.filter((note)=>note.squareId===selected.id)} me={me!} members={members} saving={saving} boardLocked={boardLocked} visitorDigits={visitorDigits} homeDigits={homeDigits} onClose={() => setSelected(null)} onSave={saveSquare} onMutateNote={mutateSquareNote} />}
     {showFlyer && flyerUrl && <div className="modal-backdrop flyer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowFlyer(false)}><section className="flyer-modal" role="dialog" aria-modal="true" aria-labelledby="flyer-title"><button className="modal-close" onClick={() => setShowFlyer(false)} aria-label={flyerInEnglish?"Close":"Cerrar"}>×</button><div className="flyer-modal-head"><p className="kicker">{flyerInEnglish?"Ready to share":"Listo para compartir"}</p><h3 id="flyer-title">{flyerType==="winner"?"Flier del ganador":flyerType==="payment-en"?"Payment flyer":flyerType==="payment"?"Flyer de cobro":flyerType==="report"?"Flier de avance":flyerType==="board-en"?"English flyer":flyerType==="schedule-en"?"English flyer + games":flyerType==="schedule"?"Flier con juegos MNF":"Flier de la quiniela"}</h3><p>{flyerType==="winner"?"Celebra y comparte al ganador de esta fecha.":flyerType==="payment-en"?"Share the payment options for pending squares.":flyerType==="payment"?"Comparte amablemente las opciones para liquidar las casillas pendientes.":flyerType==="report"?"El reporte refleja el avance más reciente por socio.":flyerType==="schedule-en"?"Board, rules, example and the full MNF schedule with team logos.":flyerType==="schedule"?"Tablero, reglas, ejemplo y calendario MNF completo con logos de los equipos.":flyerType==="board-en"?"The original English board flyer.":"El flier original con el estado actual del tablero."}</p></div><div className="flyer-preview"><img src={flyerUrl} alt={flyerType==="winner"?"Flier de felicitación al ganador de la Quiniela MNF":flyerType==="payment-en"?"Payment options for pending MNF Football Pool squares":flyerType==="payment"?"Flyer con opciones para liquidar casillas pendientes":flyerType==="report"?"Flier del avance de casillas por socio":flyerType==="schedule-en"?"English MNF Football Pool flyer with board, rules and schedule":flyerType==="schedule"?"Flier vertical de la Quiniela MNF con tablero, reglas y calendario":flyerType==="board-en"?"English MNF Football Pool original flyer":"Flier original de la Quiniela MNF"}/></div><div className="flyer-actions"><button className="whatsapp-button" onClick={shareFlyer}>{flyerInEnglish?"Share":"Compartir"}</button><button className="copy-button" onClick={copyFlyer}>{flyerInEnglish?"Copy image":"Copiar imagen"}</button><button className="download-button" onClick={() => flyerBlob && downloadFlyer(flyerBlob,flyerType)}>{flyerInEnglish?"Save":"Guardar"} {flyerType==="payment"||flyerType==="payment-en"?"JPG":"PNG"}</button></div></section></div>}
     {showDigits && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowDigits(false)}><section className="modal digits-modal" role="dialog" aria-modal="true" aria-labelledby="digits-title"><button className="modal-close" onClick={() => setShowDigits(false)} aria-label="Cerrar">×</button><p className="kicker">Inicio de temporada</p><h3 id="digits-title">Números de juego</h3><p className="modal-help">Déjalos vacíos hasta el sorteo. Después, ingresa los 10 dígitos en el orden asignado.</p><label>Columnas — visitante<input value={visitorDigits} onChange={(e) => setVisitorDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 7451029863" /></label><label>Renglones — casa<input value={homeDigits} onChange={(e) => setHomeDigits(cleanDigits(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Ej. 0294831756" /></label><div className="modal-actions"><button className="secondary" onClick={() => {setVisitorDigits("");setHomeDigits("");}}>Limpiar</button><button className="primary" onClick={saveDigits} disabled={saving}>{saving ? "Guardando…" : "Guardar números"}</button></div></section></div>}
   </main>;
@@ -345,7 +359,7 @@ function AccessScreen({ state, email }:{ state:"loading"|"signin"|"denied"|"pass
   </div></main>;
 }
 
-function SquareModal({ square, me, members, saving, boardLocked, visitorDigits, homeDigits, onClose, onSave }:{ square:Square; me:Member; members:Member[]; saving:boolean; boardLocked:boolean; visitorDigits:string; homeDigits:string; onClose:()=>void; onSave:(square:Square)=>void }) {
+function SquareModal({ square, notes, me, members, saving, boardLocked, visitorDigits, homeDigits, onClose, onSave, onMutateNote }:{ square:Square; notes:SquareNote[]; me:Member; members:Member[]; saving:boolean; boardLocked:boolean; visitorDigits:string; homeDigits:string; onClose:()=>void; onSave:(square:Square)=>void; onMutateNote:(action:NoteAction,squareId:number,text?:string,noteId?:number)=>Promise<boolean> }) {
   const [draft,setDraft] = useState(square);
   const owns = isOwned(square,me); const admin = me.role === "admin";
   const column=(square.id-1)%10,row=Math.floor((square.id-1)/10),gameNumbersReady=isDigitSet(visitorDigits)&&isDigitSet(homeDigits),visitorDigit=visitorDigits[column],homeDigit=homeDigits[row];
@@ -358,16 +372,35 @@ function SquareModal({ square, me, members, saving, boardLocked, visitorDigits, 
   return <div className="modal-backdrop square-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal square-modal" role="dialog" aria-modal="true" aria-labelledby="square-title"><button className="modal-close" onClick={onClose} aria-label="Cerrar">×</button><div className={`modal-number ${draft.status}`}>{draft.id}</div><div><p className="kicker">Detalle de casilla</p><h3 id="square-title">Casilla #{draft.id}</h3></div>
     <div className="status-picker" role="group" aria-label="Estado de la casilla">{statuses.map((status) => <button key={status} disabled={!allowed(status)} className={draft.status === status ? `active ${status}` : status} onClick={() => setDraft((current) => ({...current,status}))}><i/>{labelFor(status)}</button>)}</div>
     <div className={`square-matchup ${gameNumbersReady?"":"pending"}`}><span>Números de juego</span>{gameNumbersReady?<strong><b>Visitante {visitorDigit}</b><i>VS</i><b>Casa {homeDigit}</b></strong>:<strong>Pendientes de asignación</strong>}</div>
-    {draft.status !== "available" && <>{editableDetails ? <><label>Nombre de quien juega<input autoFocus value={draft.participant} onChange={(e) => update("participant",e.target.value)} placeholder="Nombre completo"/></label><label>Notas <span>(opcional)</span><textarea value={draft.notes} onChange={(e) => update("notes",e.target.value)} rows={4} maxLength={2000} placeholder="Agrega información relevante sobre esta casilla"/></label></> : <div className="readonly-data"><small>JUGADOR</small><strong>{draft.participant}</strong>{draft.notes && <span className="readonly-notes">{draft.notes}</span>}</div>}
+    {draft.status !== "available" && <>{editableDetails ? <label>Nombre de quien juega<input autoFocus value={draft.participant} onChange={(e) => update("participant",e.target.value)} placeholder="Nombre completo"/></label> : <div className="readonly-data"><small>JUGADOR</small><strong>{draft.participant}</strong></div>}
       {admin ? <label>Socio que la vendió<select value={draft.reservedByName} onChange={(e) => { const member = members.find((item) => item.name === e.target.value); setDraft((current) => ({...current,reservedByName:e.target.value,reservedByEmail:member?.email ?? current.reservedByEmail})); }}><option value="">Selecciona un socio registrado</option>{draft.reservedByName && !members.some((member) => member.name === draft.reservedByName) && <option value={draft.reservedByName}>{draft.reservedByName} (registro anterior)</option>}{members.filter((member) => member.active).map((member) => <option key={member.email} value={member.name}>{member.name}</option>)}</select></label> : <div className="ownership"><span>Vendida por</span><strong>{draft.reservedByName || (square.status === "available" ? me.name : "Sin asignar")}</strong></div>}
       {(draft.status === "paid" || draft.status === "treasury") && <div className="payment-proof"><span>Pago confirmado por</span><strong>{draft.paidByName || "Se registrará al guardar"}</strong></div>}
       {draft.status === "treasury" && <div className="treasury-proof"><span>Recibido en Tesorería por</span><strong>{draft.treasuryByName || "Se registrará al guardar"}</strong></div>}
     </>}
+    <SquareNoteLog square={square} notes={notes} me={me} saving={saving} onMutate={onMutateNote}/>
     {!canSave && boardLocked && <p className="locked-message">Los números de juego ya fueron cargados. El tablero está cerrado para nuevas reservas y ediciones.</p>}
     {!canSave && !boardLocked && square.status === "available" && <p className="modal-help">Esta casilla está disponible. Selecciona <strong>Reservada</strong> para capturar los datos y apartarla.</p>}
     {!canSave && !boardLocked && square.status !== "available" && <p className="locked-message">Esta casilla fue vendida por otro socio. Puedes consultar sus datos, pero no modificarlos.</p>}
     <div className="modal-actions"><button className="secondary" onClick={onClose}>Cerrar</button>{canSave && <button className="primary" disabled={saving || (draft.status !== "available" && (!draft.participant.trim() || (admin && !draft.reservedByName.trim())))} onClick={() => onSave(draft)}>{saving ? "Guardando…" : draft.status === "treasury" && square.status !== "treasury" ? "Registrar en Tesorería" : draft.status === "paid" && square.status !== "paid" ? "Confirmar pago" : "Guardar cambios"}</button>}</div>
   </section></div>;
+}
+
+function SquareNoteLog({square,notes,me,saving,onMutate}:{square:Square;notes:SquareNote[];me:Member;saving:boolean;onMutate:(action:NoteAction,squareId:number,text?:string,noteId?:number)=>Promise<boolean>}) {
+  const [text,setText]=useState("");
+  const [sort,setSort]=useState<"desc"|"asc">("desc");
+  const [editingId,setEditingId]=useState<number|null>(null);
+  const [editingText,setEditingText]=useState("");
+  const [now,setNow]=useState(()=>Date.now());
+  useEffect(()=>{const timer=window.setInterval(()=>setNow(Date.now()),30000);return()=>window.clearInterval(timer);},[]);
+  const ordered=[...notes].sort((a,b)=>(sort==="desc"?-1:1)*(new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime()||a.id-b.id));
+  const canModify=(note:SquareNote)=>note.authorEmail===me.email&&now<new Date(note.editableUntil).getTime();
+  const addNote=async()=>{if(await onMutate("note_create",square.id,text))setText("");};
+  const updateNote=async(noteId:number)=>{if(await onMutate("note_update",square.id,editingText,noteId)){setEditingId(null);setEditingText("");}};
+  const deleteNote=async(noteId:number)=>{if(window.confirm("¿Eliminar esta nota? Sólo puedes hacerlo durante los primeros 20 minutos."))await onMutate("note_delete",square.id,"",noteId);};
+  return <section className="square-notes"><div className="square-notes-head"><div><strong>Bitácora de notas</strong><span>{notes.length} {notes.length===1?"registro":"registros"}</span></div><button type="button" onClick={()=>setSort((current)=>current==="desc"?"asc":"desc")} aria-label="Cambiar orden de las notas">{sort==="desc"?"Más recientes ↓":"Más antiguas ↑"}</button></div>
+    <div className="note-compose"><textarea value={text} onChange={(event)=>setText(event.target.value)} rows={3} maxLength={2000} placeholder="Agregar una nota a esta casilla" aria-label="Nueva nota"/><div><small>Podrás editarla o eliminarla durante 20 minutos.</small><button type="button" disabled={saving||!text.trim()} onClick={addNote}>Agregar nota</button></div></div>
+    <div className="note-list" aria-label="Historial de notas">{ordered.length?ordered.map((note)=>{const editable=canModify(note),editing=editingId===note.id;return <article key={note.id}><div className="note-meta"><span className={`drilldown-status ${note.status}`}>{labelFor(note.status)}</span><strong>{note.authorName}</strong><time dateTime={note.createdAt}>{formatNoteDate(note.createdAt)}</time>{note.updatedAt!==note.createdAt&&<em>Editada</em>}</div>{editing?<><textarea value={editingText} onChange={(event)=>setEditingText(event.target.value)} rows={3} maxLength={2000}/><div className="note-edit-actions"><button type="button" onClick={()=>{setEditingId(null);setEditingText("");}}>Cancelar</button><button type="button" disabled={saving||!editingText.trim()} onClick={()=>updateNote(note.id)}>Guardar</button></div></>:<p>{note.text}</p>}{editable&&!editing&&<div className="note-actions"><button type="button" onClick={()=>{setEditingId(note.id);setEditingText(note.text);}}>Editar</button><button type="button" onClick={()=>deleteNote(note.id)}>Eliminar</button></div>}</article>}):<p className="notes-empty">Aún no hay notas en esta casilla.</p>}</div>
+  </section>;
 }
 
 function Reports({ rows, squares, visitorDigits, homeDigits, gameResults, activity, me, members, season, seasonArchives, saving, generatingFlyer, onGenerateFlyer, onGenerateWinnerFlyer, onSaveMember, onRemoveMember, onSaveGameResult, onClearGameResult, onClearAllGameResults, onSaveSeason }:{ rows:ReportRow[]; squares:Square[]; visitorDigits:string; homeDigits:string; gameResults:GameResult[]; activity:Activity[]; me:Member; members:Member[]; season:SeasonConfig; seasonArchives:SeasonArchive[]; saving:boolean; generatingFlyer:boolean; onGenerateFlyer:()=>void; onGenerateWinnerFlyer:(winner:WinnerRow)=>Promise<void>; onSaveMember:(member:Member,originalEmail?:string)=>Promise<boolean>; onRemoveMember:(member:Member)=>Promise<boolean>; onSaveGameResult:(gameId:number,visitorScore:number,homeScore:number)=>Promise<boolean>; onClearGameResult:(gameId:number)=>Promise<boolean>; onClearAllGameResults:()=>Promise<boolean>; onSaveSeason:(season:SeasonConfig,activate?:boolean)=>Promise<boolean> }) {
@@ -615,4 +648,5 @@ function formatPaymentDeadline(value:string,language:"es"|"en"){const [year,mont
 function passwordMeetsPolicy(value:string){ return value.length>=8&&value.length<=128&&/[a-z]/.test(value)&&/[A-Z]/.test(value)&&/[0-9]/.test(value)&&/[^A-Za-z0-9]/.test(value); }
 function activityIcon(action:string){ return action==="paid"?"$":action==="treasury"?"T":action==="reserved"?"R":action==="released"?"↺":action.startsWith("game_result")?"J":action.startsWith("season_")?"T":"·"; }
 function activityText(item:Activity){ if(item.action==="paid")return `marcó como pagada la casilla ${item.squareId}`;if(item.action==="treasury")return `registró en Tesorería la casilla ${item.squareId}`;if(item.action==="reserved")return `reservó la casilla ${item.squareId} para ${item.details}`;if(item.action==="released")return `liberó la casilla ${item.squareId}`;if(item.action==="member_updated")return `actualizó el acceso de ${item.details}`;if(item.action==="member_removed")return `retiró el acceso de ${item.details}`;if(item.action==="numbers_updated")return "actualizó los números de juego";if(item.action==="game_result_updated")return `registró el resultado: ${item.details}`;if(item.action==="game_result_cleared")return `eliminó el resultado del ${item.details}`;if(item.action==="game_results_cleared")return `eliminó todos los marcadores: ${item.details}`;if(item.action==="season_updated")return `actualizó la temporada: ${item.details}`;if(item.action==="season_activated")return `activó la nueva temporada: ${item.details}`;return `actualizó la casilla ${item.squareId}`; }
+function formatNoteDate(value:string){ try{return new Intl.DateTimeFormat("es-MX",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}catch{return value;} }
 function formatDate(value:string){ try{return new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}catch{return value;} }
