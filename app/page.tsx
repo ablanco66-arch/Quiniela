@@ -570,26 +570,30 @@ async function createReportFlyer(rows:ReportRow[]){
 async function createSquareDetailPdf(squares:Square[],visitorDigits:string,homeDigits:string,season:SeasonConfig,squareFilter:string) {
   if(!isDigitSet(visitorDigits)||!isDigitSet(homeDigits))throw new Error("Carga primero los números de juego para ordenar el PDF por Visitante y Casa.");
   const [clubLogo,mnfLogo,motto]=await Promise.all([loadCanvasImage("/logo-crjc-white-gold.png"),loadCanvasImage("/logo-monday-night-football.png"),loadCanvasImage("/lema-rotario-2026-2027.png")]);
-  const records=squares.map((square)=>({square,visitor:Number(visitorDigits[(square.id-1)%10]),home:Number(homeDigits[Math.floor((square.id-1)/10)]),seller:square.reservedByName||square.contact||"—"})).sort((a,b)=>a.visitor-b.visitor||a.home-b.home||a.square.id-b.square.id);
+  const records=squares.map((square)=>({square,visitor:Number(visitorDigits[(square.id-1)%10]),home:Number(homeDigits[Math.floor((square.id-1)/10)]),seller:square.reservedByName||square.contact||"—"}));
+  const reportRuns=[
+    {orderLabel:"VISITANTE → CASA",records:[...records].sort((a,b)=>a.visitor-b.visitor||a.home-b.home||a.square.id-b.square.id)},
+    {orderLabel:"JUGADOR → VISITANTE → CASA",records:[...records].sort((a,b)=>(a.square.participant||"Sin jugador").localeCompare(b.square.participant||"Sin jugador","es",{sensitivity:"base",numeric:true})||a.visitor-b.visitor||a.home-b.home||a.square.id-b.square.id)},
+  ];
   const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
   const navy="#061b3e",blue="#123a78",gold="#f7b500",cream="#fff8e5",line="#d8dee8",muted="#66758a",white="#ffffff";
   const left=11,tableWidth=188,headerY=45,tableHeaderHeight=7.5,footerY=284;
   const columns=[{label:"CASILLA",x:left,w:20,align:"center" as const},{label:"VISITANTE",x:left+20,w:24,align:"center" as const},{label:"CASA",x:left+44,w:24,align:"center" as const},{label:"JUGADOR",x:left+68,w:64,align:"left" as const},{label:"SOCIO",x:left+132,w:56,align:"left" as const}];
   const generatedDate=new Intl.DateTimeFormat("es-MX",{day:"2-digit",month:"long",year:"numeric"}).format(new Date());
   const fit=(value:string,width:number)=>{let result=value||"—";while(result.length>1&&doc.getTextWidth(result)>width)result=`${result.slice(0,-2)}…`;return result;};
-  const pages=records.length>50?2:1,rowsPerPage=Math.max(1,Math.ceil(records.length/pages));
+  const pagesPerRun=2,totalPages=reportRuns.length*pagesPerRun,rowsPerPage=Math.max(1,Math.ceil(records.length/pagesPerRun));
   const rowHeight=Math.min(7.2,(footerY-headerY-tableHeaderHeight-2)/rowsPerPage),rowFontSize=Math.max(5.4,Math.min(7.4,rowHeight+1));
-  const drawHeader=()=>{doc.setFillColor(navy);doc.rect(0,0,210,42,"F");doc.setFillColor(gold);doc.rect(0,0,210,2,"F");doc.addImage(clubLogo,"PNG",10,6,38,17);doc.addImage(mnfLogo,"PNG",183,6,18,18);doc.setTextColor(gold);doc.setFont("helvetica","bold");doc.setFontSize(11.5);doc.text(`QUINIELA MONDAY NIGHT FOOTBALL ${season.name}`,116,13,{align:"center"});doc.setTextColor(white);doc.setFontSize(14);doc.text("DETALLE DE CASILLAS",116,21.5,{align:"center"});doc.setFont("helvetica","normal");doc.setFontSize(7);doc.setTextColor("#c5d0df");doc.text(`${records.length} CASILLAS${squareFilter!=="all"?` · ${squareFilter.toUpperCase()}`:""} · GENERADO EL ${generatedDate.toUpperCase()}`,116,30,{align:"center"});doc.setDrawColor("#ffffff");doc.setLineWidth(.22);for(let x=63;x<174;x+=12){doc.line(x,36,x+5,36);}};
+  const drawHeader=(orderLabel:string,runNumber:number)=>{doc.setFillColor(navy);doc.rect(0,0,210,42,"F");doc.setFillColor(gold);doc.rect(0,0,210,2,"F");doc.addImage(clubLogo,"PNG",10,6,38,17);doc.addImage(mnfLogo,"PNG",183,6,18,18);doc.setTextColor(gold);doc.setFont("helvetica","bold");doc.setFontSize(11.5);doc.text(`QUINIELA MONDAY NIGHT FOOTBALL ${season.name}`,116,12.5,{align:"center"});doc.setTextColor(white);doc.setFontSize(13.5);doc.text("DETALLE DE CASILLAS",116,20.5,{align:"center"});doc.setFont("helvetica","normal");doc.setFontSize(6.2);doc.setTextColor("#c5d0df");doc.text(fit(`${records.length} CASILLAS${squareFilter!=="all"?` · ${squareFilter.toUpperCase()}`:""} · CORRIDA ${runNumber} DE 2 · GENERADO EL ${generatedDate.toUpperCase()}`,122),116,27.8,{align:"center"});doc.setTextColor(gold);doc.setFont("helvetica","bold");doc.setFontSize(6.8);doc.text(`CRITERIO DE ORDEN: ${orderLabel}`,116,35,{align:"center"});};
   const drawTableHeader=()=>{doc.setFillColor(gold);doc.rect(left,headerY,tableWidth,tableHeaderHeight,"F");doc.setTextColor(navy);doc.setFont("helvetica","bold");doc.setFontSize(6.4);columns.forEach((column)=>doc.text(column.label,column.align==="center"?column.x+column.w/2:column.x+2,headerY+4.9,{align:column.align}));};
   const drawFooter=(page:number,total:number)=>{doc.setFillColor(navy);doc.rect(0,footerY,210,13,"F");doc.setFillColor(gold);doc.rect(0,footerY,210,1,"F");doc.setTextColor(white);doc.setFont("helvetica","bold");doc.setFontSize(6);doc.text("CLUB ROTARIO JUÁREZ CONCORDIA",11,292);doc.setFont("helvetica","normal");doc.setTextColor("#b9c7da");doc.text(`Página ${page} de ${total}`,105,292,{align:"center"});doc.addImage(motto,"PNG",170,285,27,11.5);};
-  for(let page=0;page<pages;page++){
-    if(page>0)doc.addPage();drawHeader();drawTableHeader();
-    const pageRows=records.slice(page*rowsPerPage,(page+1)*rowsPerPage);
-    if(!pageRows.length){doc.setTextColor(muted);doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text("No hay casillas que coincidan con el filtro seleccionado.",105,88,{align:"center"});}
+  let globalPage=0;
+  reportRuns.forEach((run,runIndex)=>{for(let runPage=0;runPage<pagesPerRun;runPage++){
+    if(globalPage>0)doc.addPage();globalPage++;drawHeader(run.orderLabel,runIndex+1);drawTableHeader();
+    const pageRows=run.records.slice(runPage*rowsPerPage,(runPage+1)*rowsPerPage);
+    if(!pageRows.length){doc.setTextColor(muted);doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(records.length?"Sin registros adicionales en esta corrida.":"No hay casillas que coincidan con el filtro seleccionado.",105,88,{align:"center"});}
     pageRows.forEach((record,index)=>{const y=headerY+tableHeaderHeight+index*rowHeight,baseline=y+rowHeight*.68;if(index%2===0){doc.setFillColor(cream);doc.rect(left,y,tableWidth,rowHeight,"F");}doc.setDrawColor(line);doc.setLineWidth(.12);doc.line(left,y+rowHeight,left+tableWidth,y+rowHeight);doc.setTextColor(blue);doc.setFont("helvetica","bold");doc.setFontSize(rowFontSize);doc.text(String(record.square.id),columns[0].x+columns[0].w/2,baseline,{align:"center"});doc.setTextColor(navy);doc.text(String(record.visitor),columns[1].x+columns[1].w/2,baseline,{align:"center"});doc.text(String(record.home),columns[2].x+columns[2].w/2,baseline,{align:"center"});doc.setFont("helvetica","normal");doc.setFontSize(rowFontSize-.25);doc.text(fit(record.square.participant,columns[3].w-4),columns[3].x+2,baseline);doc.text(fit(record.seller,columns[4].w-4),columns[4].x+2,baseline);});
-    doc.setDrawColor("#bcc6d4");columns.slice(1).forEach((column)=>doc.line(column.x,headerY,column.x,headerY+tableHeaderHeight+pageRows.length*rowHeight));
-  }
-  for(let page=1;page<=pages;page++){doc.setPage(page);drawFooter(page,pages);}
+    doc.setDrawColor("#bcc6d4");columns.slice(1).forEach((column)=>doc.line(column.x,headerY,column.x,headerY+tableHeaderHeight+pageRows.length*rowHeight));drawFooter(globalPage,totalPages);
+  }});
   const isoDate=new Date().toISOString().slice(0,10);doc.save(`detalle-casillas-quiniela-mnf-${season.name}-${isoDate}.pdf`);
 }
 

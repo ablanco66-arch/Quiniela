@@ -87,12 +87,14 @@ test("square detail PDF includes branding, date and visitor-home ordering", asyn
   assert.match(page, /import \{ jsPDF \} from "jspdf"/);
   assert.match(page, /📄 Generar PDF/);
   assert.match(page, /a\.visitor-b\.visitor\|\|a\.home-b\.home\|\|a\.square\.id-b\.square\.id/);
+  assert.match(page, /localeCompare\(b\.square\.participant\|\|"Sin jugador","es"[\s\S]*a\.visitor-b\.visitor\|\|a\.home-b\.home/);
   assert.match(page, /QUINIELA MONDAY NIGHT FOOTBALL \$\{season\.name\}/);
   assert.match(page, /logo-crjc-white-gold\.png[\s\S]*logo-monday-night-football\.png[\s\S]*lema-rotario-2026-2027\.png/);
   assert.match(page, /\{day:"2-digit",month:"long",year:"numeric"\}/);
   assert.match(page, /CASILLA[\s\S]*VISITANTE[\s\S]*CASA[\s\S]*JUGADOR[\s\S]*SOCIO/);
-  assert.match(page, /records\.length>50\?2:1/);
-  assert.match(page, /Math\.ceil\(records\.length\/pages\)/);
+  assert.match(page, /pagesPerRun=2,totalPages=reportRuns\.length\*pagesPerRun/);
+  assert.match(page, /CRITERIO DE ORDEN: \$\{orderLabel\}/);
+  assert.match(page, /drawFooter\(globalPage,totalPages\)/);
   assert.match(page, /\$\{records\.length\} CASILLAS[\s\S]*GENERADO EL/);
   assert.match(styles, /\.detail-pdf-button/);
 });
