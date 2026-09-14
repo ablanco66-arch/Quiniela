@@ -57,6 +57,13 @@
       "when": 1786231384626,
       "tag": "0007_wonderful_nehzno",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789353535047,
+      "tag": "0008_aromatic_butterfly",
+      "breakpoints": true
     }
   ]
 }

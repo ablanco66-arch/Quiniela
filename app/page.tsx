@@ -6,7 +6,7 @@ type Status = "available" | "reserved" | "paid" | "treasury";
 type Role = "admin" | "user" | "treasury";
 type FlyerType = "board" | "board-en" | "schedule" | "schedule-en" | "report" | "payment" | "payment-en" | "winner";
 type Square = {
-  id: number; status: Status; participant: string; contact: string; phone: string;
+  id: number; status: Status; participant: string; contact: string; notes: string;
   reservedByEmail: string; reservedByName: string; reservedAt: string;
   paidByEmail: string; paidByName: string; paidAt: string;
   treasuryByEmail: string; treasuryByName: string; treasuryAt: string;
@@ -35,7 +35,7 @@ const defaultGames: Game[] = [
 ];
 const defaultSeason:SeasonConfig={name:"2026",squarePrice:100,gamePrize:300,paymentDeadline:"2026-09-14",games:defaultGames};
 
-const emptySquares: Square[] = Array.from({ length: 100 }, (_, index) => ({ id:index + 1, status:"available", participant:"", contact:"", phone:"", reservedByEmail:"", reservedByName:"", reservedAt:"", paidByEmail:"", paidByName:"", paidAt:"", treasuryByEmail:"", treasuryByName:"", treasuryAt:"" }));
+const emptySquares: Square[] = Array.from({ length: 100 }, (_, index) => ({ id:index + 1, status:"available", participant:"", contact:"", notes:"", reservedByEmail:"", reservedByName:"", reservedAt:"", paidByEmail:"", paidByName:"", paidAt:"", treasuryByEmail:"", treasuryByName:"", treasuryAt:"" }));
 const PASSWORD_PATTERN = "(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,128}";
 const PASSWORD_HINT = "Mínimo 8 caracteres con minúscula, mayúscula, número y símbolo especial.";
 
@@ -358,7 +358,7 @@ function SquareModal({ square, me, members, saving, boardLocked, visitorDigits, 
   return <div className="modal-backdrop square-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal square-modal" role="dialog" aria-modal="true" aria-labelledby="square-title"><button className="modal-close" onClick={onClose} aria-label="Cerrar">×</button><div className={`modal-number ${draft.status}`}>{draft.id}</div><div><p className="kicker">Detalle de casilla</p><h3 id="square-title">Casilla #{draft.id}</h3></div>
     <div className="status-picker" role="group" aria-label="Estado de la casilla">{statuses.map((status) => <button key={status} disabled={!allowed(status)} className={draft.status === status ? `active ${status}` : status} onClick={() => setDraft((current) => ({...current,status}))}><i/>{labelFor(status)}</button>)}</div>
     <div className={`square-matchup ${gameNumbersReady?"":"pending"}`}><span>Números de juego</span>{gameNumbersReady?<strong><b>Visitante {visitorDigit}</b><i>VS</i><b>Casa {homeDigit}</b></strong>:<strong>Pendientes de asignación</strong>}</div>
-    {draft.status !== "available" && <>{editableDetails ? <><label>Nombre de quien juega<input autoFocus value={draft.participant} onChange={(e) => update("participant",e.target.value)} placeholder="Nombre completo"/></label><label>Teléfono <span>(opcional)</span><input value={draft.phone} onChange={(e) => update("phone",e.target.value)} inputMode="tel" placeholder="(656) 000 0000"/></label></> : <div className="readonly-data"><small>JUGADOR</small><strong>{draft.participant}</strong>{draft.phone && <span>{draft.phone}</span>}</div>}
+    {draft.status !== "available" && <>{editableDetails ? <><label>Nombre de quien juega<input autoFocus value={draft.participant} onChange={(e) => update("participant",e.target.value)} placeholder="Nombre completo"/></label><label>Notas <span>(opcional)</span><textarea value={draft.notes} onChange={(e) => update("notes",e.target.value)} rows={4} maxLength={2000} placeholder="Agrega información relevante sobre esta casilla"/></label></> : <div className="readonly-data"><small>JUGADOR</small><strong>{draft.participant}</strong>{draft.notes && <span className="readonly-notes">{draft.notes}</span>}</div>}
       {admin ? <label>Socio que la vendió<select value={draft.reservedByName} onChange={(e) => { const member = members.find((item) => item.name === e.target.value); setDraft((current) => ({...current,reservedByName:e.target.value,reservedByEmail:member?.email ?? current.reservedByEmail})); }}><option value="">Selecciona un socio registrado</option>{draft.reservedByName && !members.some((member) => member.name === draft.reservedByName) && <option value={draft.reservedByName}>{draft.reservedByName} (registro anterior)</option>}{members.filter((member) => member.active).map((member) => <option key={member.email} value={member.name}>{member.name}</option>)}</select></label> : <div className="ownership"><span>Vendida por</span><strong>{draft.reservedByName || (square.status === "available" ? me.name : "Sin asignar")}</strong></div>}
       {(draft.status === "paid" || draft.status === "treasury") && <div className="payment-proof"><span>Pago confirmado por</span><strong>{draft.paidByName || "Se registrará al guardar"}</strong></div>}
       {draft.status === "treasury" && <div className="treasury-proof"><span>Recibido en Tesorería por</span><strong>{draft.treasuryByName || "Se registrará al guardar"}</strong></div>}

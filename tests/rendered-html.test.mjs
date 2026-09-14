@@ -51,3 +51,23 @@ test("treasury status is persisted, restricted and rendered in blue", async () =
   assert.match(page, /\[row\.treasury,855,blue\]/);
   assert.match(page, /\[510,652,787,925\]\.forEach/);
 });
+
+test("square notes replace the phone field and persist as long optional text", async () => {
+  const [page, boardApi, styles, schema, migration] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/api/board/route.ts"),
+    read("app/globals.css"),
+    read("db/schema.ts"),
+    read("drizzle/0008_aromatic_butterfly.sql"),
+  ]);
+
+  assert.match(page, /contact: string; notes: string/);
+  assert.match(page, /<label>Notas <span>\(opcional\)<\/span><textarea/);
+  assert.match(page, /maxLength=\{2000\}/);
+  assert.doesNotMatch(page, /Teléfono|draft\.phone/);
+  assert.match(boardApi, /ALTER TABLE squares ADD COLUMN notes TEXT NOT NULL DEFAULT ''/);
+  assert.match(boardApi, /payload\.notes[\s\S]*slice\(0, 2000\)/);
+  assert.match(styles, /\.readonly-data \.readonly-notes[^}]*white-space:pre-wrap/);
+  assert.match(schema, /notes: text\("notes"\)/);
+  assert.match(migration, /ADD `notes` text DEFAULT '' NOT NULL/);
+});

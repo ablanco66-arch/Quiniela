@@ -7,6 +7,7 @@ export const squares = sqliteTable("squares", {
   participant: text("participant").notNull().default(""),
   contact: text("contact").notNull().default(""),
   phone: text("phone").notNull().default(""),
+  notes: text("notes").notNull().default(""),
   reservedByEmail: text("reserved_by_email").notNull().default(""),
   reservedByName: text("reserved_by_name").notNull().default(""),
   reservedAt: text("reserved_at").notNull().default(""),
