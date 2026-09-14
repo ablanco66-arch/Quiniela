@@ -534,7 +534,7 @@ async function createFlyer(squares: Square[],language:"es"|"en"="es",season:Seas
   const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = flyerHeight;
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas no disponible");
   const styles=getComputedStyle(document.body), displayFont=styles.getPropertyValue("--font-display").trim()||"Arial Black", bodyFont=styles.getPropertyValue("--font-body").trim()||"Arial";
-  const navy = "#061b3e", blue = "#1673c9", gold = "#f7b500", green = "#168553", cream = "#fff8e5", white = "#ffffff";
+  const navy = "#061b3e", blue = "#2595ff", gold = "#f7b500", green = "#168553", cream = "#fff8e5", white = "#ffffff";
   const english=language==="en";
   const copy=english?{
     name:`MNF FOOTBALL POOL ${season.name}`,headline:"PLAY. WIN. GIVE BACK.",intro:"Pick a square and turn every Monday into support for a great cause.",offer:`$${season.squarePrice} USD PER SQUARE   •   $${season.gamePrize} USD PER GAME   •   ${season.games.length} GAMES`,
