@@ -31,3 +31,18 @@ test("application source contains production branding and no starter preview", a
   assert.match(vite, /sites\(\)/);
   assert.doesNotMatch(page + layout + styles, /codex-preview|SkeletonPreview|react-loading-skeleton/);
 });
+
+test("treasury status is persisted, restricted and rendered in blue", async () => {
+  const [page, boardApi, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/api/board/route.ts"),
+    read("app/globals.css"),
+  ]);
+
+  assert.match(page, /"available" \| "reserved" \| "paid" \| "treasury"/);
+  assert.match(page, /En Tesorería/);
+  assert.match(boardApi, /treasury_by_name/);
+  assert.match(boardApi, /actor\.role === "user"[^\n]+\["paid", "treasury"\]/);
+  assert.match(styles, /\.square\.treasury\s*\{[^}]*background:var\(--blue\)/);
+  assert.match(styles, /\.square-modal\s*\{[^}]*zoom:\.88/);
+});

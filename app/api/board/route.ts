@@ -30,7 +30,7 @@ async function ensureDatabase() {
   const db = env.DB;
   await ensureLocalAuthSchema();
   await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS squares (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'available', participant TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', reserved_by_email TEXT NOT NULL DEFAULT '', reserved_by_name TEXT NOT NULL DEFAULT '', reserved_at TEXT NOT NULL DEFAULT '', paid_by_email TEXT NOT NULL DEFAULT '', paid_by_name TEXT NOT NULL DEFAULT '', paid_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS squares (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'available', participant TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', reserved_by_email TEXT NOT NULL DEFAULT '', reserved_by_name TEXT NOT NULL DEFAULT '', reserved_at TEXT NOT NULL DEFAULT '', paid_by_email TEXT NOT NULL DEFAULT '', paid_by_name TEXT NOT NULL DEFAULT '', paid_at TEXT NOT NULL DEFAULT '', treasury_by_email TEXT NOT NULL DEFAULT '', treasury_by_name TEXT NOT NULL DEFAULT '', treasury_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), visitor_digits TEXT NOT NULL DEFAULT '', home_digits TEXT NOT NULL DEFAULT '', season_name TEXT NOT NULL DEFAULT '2026', square_price INTEGER NOT NULL DEFAULT 100, game_prize INTEGER NOT NULL DEFAULT 300, payment_deadline TEXT NOT NULL DEFAULT '2026-09-14', games_json TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, square_id INTEGER, action TEXT NOT NULL, actor_email TEXT NOT NULL, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, previous_status TEXT NOT NULL DEFAULT '', new_status TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS activity_created_id_idx ON activity (created_at DESC, id DESC)`),
@@ -50,6 +50,9 @@ async function ensureDatabase() {
     ["paid_by_email", "ALTER TABLE squares ADD COLUMN paid_by_email TEXT NOT NULL DEFAULT ''"],
     ["paid_by_name", "ALTER TABLE squares ADD COLUMN paid_by_name TEXT NOT NULL DEFAULT ''"],
     ["paid_at", "ALTER TABLE squares ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''"],
+    ["treasury_by_email", "ALTER TABLE squares ADD COLUMN treasury_by_email TEXT NOT NULL DEFAULT ''"],
+    ["treasury_by_name", "ALTER TABLE squares ADD COLUMN treasury_by_name TEXT NOT NULL DEFAULT ''"],
+    ["treasury_at", "ALTER TABLE squares ADD COLUMN treasury_at TEXT NOT NULL DEFAULT ''"],
   ].filter(([name]) => !columns.has(name));
   if (additions.length) await db.batch(additions.map(([, sql]) => db.prepare(sql)));
 
@@ -89,7 +92,7 @@ async function ensureDatabase() {
 async function getActor(request: Request): Promise<Actor | Response> {
   const localActor = await getLocalActor(request);
   if (localActor?.mustChangePassword) return Response.json({ error:"Debes cambiar la contraseña temporal antes de continuar", code:"PASSWORD_CHANGE_REQUIRED" }, { status:428 });
-  if (localActor) return localActor;
+  if (localActor) { await ensureDatabase(); return localActor; }
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Inicia sesión para continuar", code: "AUTH_REQUIRED" }, { status: 401 });
   await ensureDatabase();
@@ -104,7 +107,7 @@ export async function GET(request: Request) {
     const actor = await getActor(request);
     if (actor instanceof Response) return actor;
     const [squareResult, settings, memberResult, activityResult, gameResult, archiveResult] = await Promise.all([
-      env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares ORDER BY id`).all(),
+      env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares ORDER BY id`).all(),
       env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, payment_deadline AS paymentDeadline, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>(),
       actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
       actor.role === "admin" ? env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY created_at DESC, id DESC LIMIT 60").all() : Promise.resolve({ results: [] }),
@@ -145,7 +148,7 @@ export async function PUT(request: Request) {
       ]);
       await env.DB.batch([
         env.DB.prepare("INSERT INTO season_archives (season_name, square_price, game_prize, payment_deadline, games_json, squares_json, results_json, visitor_digits, home_digits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(String(current?.seasonName ?? ""), Number(current?.squarePrice ?? 100), Number(current?.gamePrize ?? 300), String(current?.paymentDeadline ?? ""), JSON.stringify(parseGames(String(current?.gamesJson ?? ""))), JSON.stringify(squareSnapshot.results), JSON.stringify(resultSnapshot.results), String(current?.visitorDigits ?? ""), String(current?.homeDigits ?? "")),
-        env.DB.prepare("UPDATE squares SET status = 'available', participant = '', contact = '', phone = '', reserved_by_email = '', reserved_by_name = '', reserved_at = '', paid_by_email = '', paid_by_name = '', paid_at = '', updated_at = CURRENT_TIMESTAMP"),
+        env.DB.prepare("UPDATE squares SET status = 'available', participant = '', contact = '', phone = '', reserved_by_email = '', reserved_by_name = '', reserved_at = '', paid_by_email = '', paid_by_name = '', paid_at = '', treasury_by_email = '', treasury_by_name = '', treasury_at = '', updated_at = CURRENT_TIMESTAMP"),
         env.DB.prepare("DELETE FROM game_results"),
         env.DB.prepare("UPDATE settings SET visitor_digits = '', home_digits = '', season_name = ?, square_price = ?, game_prize = ?, payment_deadline = ?, games_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1").bind(season.name, season.squarePrice, season.gamePrize, season.paymentDeadline, JSON.stringify(season.games)),
         activity(actor, null, "season_activated", String(current?.seasonName ?? ""), season.name, `${season.games.length} juegos · tablero reiniciado`),
@@ -246,11 +249,13 @@ export async function PUT(request: Request) {
           env.DB.prepare("UPDATE members SET email = ?, name = ?, role = ?, active = ?, approval_status = ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?").bind(email, name, role, active, approvalStatus, originalEmail),
           env.DB.prepare("UPDATE squares SET reserved_by_email = ?, reserved_by_name = ? WHERE reserved_by_email = ? OR (reserved_by_email = '' AND reserved_by_name = ?)").bind(email, name, originalEmail, existing.name),
           env.DB.prepare("UPDATE squares SET paid_by_email = ?, paid_by_name = ? WHERE paid_by_email = ?").bind(email, name, originalEmail),
+          env.DB.prepare("UPDATE squares SET treasury_by_email = ?, treasury_by_name = ? WHERE treasury_by_email = ?").bind(email, name, originalEmail),
           activity(actor, null, "member_updated", "", "", `${name} · ${roleLabel(role)} · ${approvalStatus === "pending" ? "pendiente" : active ? "activo" : "suspendido"}`),
         ];
         if (approvingOwnAccount) {
           statements.push(env.DB.prepare("UPDATE squares SET reserved_by_email = ?, reserved_by_name = ? WHERE reserved_by_name = ?").bind(email, name, existing.name));
           statements.push(env.DB.prepare("UPDATE squares SET paid_by_email = ?, paid_by_name = ? WHERE paid_by_name = ?").bind(email, name, existing.name));
+          statements.push(env.DB.prepare("UPDATE squares SET treasury_by_email = ?, treasury_by_name = ? WHERE treasury_by_name = ?").bind(email, name, existing.name));
         }
         if (temporaryPassword) {
           const credentials = await hashPassword(temporaryPassword);
@@ -291,16 +296,17 @@ export async function PUT(request: Request) {
     if (payload.action !== "square") return Response.json({ error: "Acción inválida" }, { status: 400 });
     const id = Number(payload.id);
     const requestedStatus = String(payload.status ?? "");
-    if (!Number.isInteger(id) || id < 1 || id > 100 || !["available", "reserved", "paid"].includes(requestedStatus)) return Response.json({ error: "Datos inválidos" }, { status: 400 });
-    const current = await env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares WHERE id = ?`).bind(id).first<Record<string, string | number>>();
+    if (!Number.isInteger(id) || id < 1 || id > 100 || !["available", "reserved", "paid", "treasury"].includes(requestedStatus)) return Response.json({ error: "Datos inválidos" }, { status: 400 });
+    const current = await env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares WHERE id = ?`).bind(id).first<Record<string, string | number>>();
     if (!current) return Response.json({ error: "Casilla no encontrada" }, { status: 404 });
     const settings = await env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits FROM settings WHERE id = 1").first<{visitorDigits:string;homeDigits:string}>();
     const boardLocked = validDigits(String(settings?.visitorDigits ?? "")) && validDigits(String(settings?.homeDigits ?? ""));
     const owns = String(current.reservedByEmail ?? "").toLowerCase() === actor.email;
-    const treasuryPayment = actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid" && (!owns || boardLocked);
-    if (current.status === "paid" && requestedStatus === "reserved" && actor.role !== "admin") return forbidden("Sólo Administración puede regresar una casilla pagada a reservada");
-    if (boardLocked && actor.role !== "admin" && !(actor.role === "treasury" && current.status === "reserved" && requestedStatus === "paid")) return forbidden("El tablero está cerrado; sólo Administración puede editar y Tesorería confirmar pagos");
-    if (actor.role === "user" && current.status === "reserved" && requestedStatus === "paid") return forbidden("Solo Tesorería y Administración pueden confirmar pagos");
+    const treasuryStatusChange = actor.role === "treasury" && current.status !== requestedStatus && ["reserved", "paid", "treasury"].includes(String(current.status)) && ["paid", "treasury"].includes(requestedStatus);
+    const treasuryStatusOnly = treasuryStatusChange && (!owns || boardLocked);
+    if (["paid", "treasury"].includes(String(current.status)) && requestedStatus === "reserved" && actor.role !== "admin") return forbidden("Sólo Administración puede regresar una casilla pagada a reservada");
+    if (boardLocked && actor.role !== "admin" && !treasuryStatusChange) return forbidden("El tablero está cerrado; sólo Administración puede editar y Tesorería registrar pagos o su recepción");
+    if (actor.role === "user" && ["paid", "treasury"].includes(requestedStatus) && requestedStatus !== current.status) return forbidden("Solo Tesorería y Administración pueden confirmar pagos o registrarlos en Tesorería");
     if (!canChangeSquare(actor.role, String(current.status), requestedStatus, owns)) return forbidden("No puedes modificar una casilla vendida por otro socio");
 
     let participant = String(payload.participant ?? "").trim();
@@ -311,13 +317,16 @@ export async function PUT(request: Request) {
     let paidByEmail = String(current.paidByEmail ?? "");
     let paidByName = String(current.paidByName ?? "");
     let paidAt = String(current.paidAt ?? "");
+    let treasuryByEmail = String(current.treasuryByEmail ?? "");
+    let treasuryByName = String(current.treasuryByName ?? "");
+    let treasuryAt = String(current.treasuryAt ?? "");
 
-    if (treasuryPayment) {
+    if (treasuryStatusOnly) {
       participant = String(current.participant ?? "");
       phone = String(current.phone ?? "");
     }
     if (requestedStatus === "available") {
-      participant = phone = reservedByEmail = reservedByName = reservedAt = paidByEmail = paidByName = paidAt = "";
+      participant = phone = reservedByEmail = reservedByName = reservedAt = paidByEmail = paidByName = paidAt = treasuryByEmail = treasuryByName = treasuryAt = "";
     } else {
       if (!participant) return Response.json({ error: "El nombre de quien juega es obligatorio" }, { status: 400 });
       if (current.status === "available") {
@@ -333,20 +342,26 @@ export async function PUT(request: Request) {
         if (!registeredSeller && !unchangedLegacySeller) return Response.json({ error: "Selecciona un socio activo registrado" }, { status: 400 });
         if (registeredSeller) { reservedByEmail = registeredSeller.email; reservedByName = registeredSeller.name; }
       }
-      if (requestedStatus === "paid" && current.status !== "paid") {
+      if (["paid", "treasury"].includes(requestedStatus) && !["paid", "treasury"].includes(String(current.status))) {
         paidByEmail = actor.email;
         paidByName = actor.name;
         paidAt = new Date().toISOString();
       }
-      if (requestedStatus === "reserved") paidByEmail = paidByName = paidAt = "";
+      if (requestedStatus === "treasury" && current.status !== "treasury") {
+        treasuryByEmail = actor.email;
+        treasuryByName = actor.name;
+        treasuryAt = new Date().toISOString();
+      }
+      if (requestedStatus === "paid") treasuryByEmail = treasuryByName = treasuryAt = "";
+      if (requestedStatus === "reserved") paidByEmail = paidByName = paidAt = treasuryByEmail = treasuryByName = treasuryAt = "";
     }
 
-    const action = current.status === "available" && requestedStatus === "reserved" ? "reserved" : requestedStatus === "paid" && current.status !== "paid" ? "paid" : requestedStatus === "available" ? "released" : "updated";
+    const action = current.status === "available" && requestedStatus === "reserved" ? "reserved" : requestedStatus === "treasury" && current.status !== "treasury" ? "treasury" : requestedStatus === "paid" && current.status !== "paid" ? "paid" : requestedStatus === "available" ? "released" : "updated";
     await env.DB.batch([
-      env.DB.prepare(`UPDATE squares SET status = ?, participant = ?, contact = ?, phone = ?, reserved_by_email = ?, reserved_by_name = ?, reserved_at = ?, paid_by_email = ?, paid_by_name = ?, paid_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(requestedStatus, participant, reservedByName, phone, reservedByEmail, reservedByName, reservedAt, paidByEmail, paidByName, paidAt, id),
+      env.DB.prepare(`UPDATE squares SET status = ?, participant = ?, contact = ?, phone = ?, reserved_by_email = ?, reserved_by_name = ?, reserved_at = ?, paid_by_email = ?, paid_by_name = ?, paid_at = ?, treasury_by_email = ?, treasury_by_name = ?, treasury_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(requestedStatus, participant, reservedByName, phone, reservedByEmail, reservedByName, reservedAt, paidByEmail, paidByName, paidAt, treasuryByEmail, treasuryByName, treasuryAt, id),
       activity(actor, id, action, String(current.status), requestedStatus, participant),
     ]);
-    const square = await env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt FROM squares WHERE id = ?`).bind(id).first();
+    const square = await env.DB.prepare(`SELECT id, status, participant, contact, phone, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares WHERE id = ?`).bind(id).first();
     return Response.json({ square });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "No fue posible guardar" }, { status: 500 });
@@ -359,9 +374,8 @@ function activity(actor: Actor, squareId: number | null, actionName: string, pre
 function canChangeSquare(role: Role, current: string, requested: string, owns: boolean) {
   if (role === "admin") return true;
   if (current === "available") return requested === "reserved";
-  if (owns && current === "reserved") return requested === "reserved" || (role === "treasury" && requested === "paid");
-  if (owns && current === "paid") return requested === "paid";
-  return role === "treasury" && current === "reserved" && requested === "paid";
+  if (owns && requested === current) return true;
+  return role === "treasury" && ["reserved", "paid", "treasury"].includes(current) && ["paid", "treasury"].includes(requested);
 }
 function forbidden(message = "Tu nivel de acceso no permite este cambio") { return Response.json({ error: message, code: "FORBIDDEN" }, { status: 403 }); }
 function sellerName(value: string) { const name = value.split(" · ")[0].trim(); return name === "JC Olivares" ? "Juan Carlos Olivares" : name === "Cabi Flores" ? "Cabiria Flores" : name; }
