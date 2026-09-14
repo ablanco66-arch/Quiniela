@@ -40,14 +40,14 @@ test("treasury status is persisted, restricted and rendered in blue", async () =
   ]);
 
   assert.match(page, /"available" \| "reserved" \| "paid" \| "treasury"/);
-  assert.match(page, /En Tesorería/);
+  assert.match(page, /Tesorería/);
   assert.match(boardApi, /treasury_by_name/);
   assert.match(boardApi, /actor\.role === "user"[^\n]+\["paid", "treasury"\]/);
   assert.match(styles, /--treasury-blue:#2595ff/);
   assert.match(styles, /\.square\.treasury\s*\{[^}]*background:var\(--treasury-blue\)/);
   assert.match(styles, /@media\(max-width:700px\)[\s\S]*\.square-modal\s*\{[^}]*zoom:\.78/);
   assert.match(page, /type ReportRow = \{ name:string; reserved:number; paid:number; treasury:number; total:number \}/);
-  assert.match(page, /<th>En Tesorería<\/th>/);
+  assert.match(page, /<th>Tesorería<\/th>/);
   assert.match(page, /\[row\.treasury,855,blue\]/);
   assert.match(page, /\[510,652,787,925\]\.forEach/);
 });
