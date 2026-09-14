@@ -93,6 +93,8 @@ test("square detail PDF includes branding, date and visitor-home ordering", asyn
   assert.match(page, /\{day:"2-digit",month:"long",year:"numeric"\}/);
   assert.match(page, /CASILLA[\s\S]*VISITANTE[\s\S]*CASA[\s\S]*JUGADOR[\s\S]*SOCIO/);
   assert.match(page, /pagesPerRun=2,totalPages=reportRuns\.length\*pagesPerRun/);
+  assert.match(page, /orderLabel:"VISITANTE — CASA"/);
+  assert.match(page, /orderLabel:"JUGADOR — VISITANTE — CASA"/);
   assert.match(page, /CRITERIO DE ORDEN: \$\{orderLabel\}/);
   assert.match(page, /drawFooter\(globalPage,totalPages\)/);
   assert.match(page, /\$\{records\.length\} CASILLAS[\s\S]*GENERADO EL/);

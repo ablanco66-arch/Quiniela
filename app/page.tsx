@@ -572,8 +572,8 @@ async function createSquareDetailPdf(squares:Square[],visitorDigits:string,homeD
   const [clubLogo,mnfLogo,motto]=await Promise.all([loadCanvasImage("/logo-crjc-white-gold.png"),loadCanvasImage("/logo-monday-night-football.png"),loadCanvasImage("/lema-rotario-2026-2027.png")]);
   const records=squares.map((square)=>({square,visitor:Number(visitorDigits[(square.id-1)%10]),home:Number(homeDigits[Math.floor((square.id-1)/10)]),seller:square.reservedByName||square.contact||"—"}));
   const reportRuns=[
-    {orderLabel:"VISITANTE → CASA",records:[...records].sort((a,b)=>a.visitor-b.visitor||a.home-b.home||a.square.id-b.square.id)},
-    {orderLabel:"JUGADOR → VISITANTE → CASA",records:[...records].sort((a,b)=>(a.square.participant||"Sin jugador").localeCompare(b.square.participant||"Sin jugador","es",{sensitivity:"base",numeric:true})||a.visitor-b.visitor||a.home-b.home||a.square.id-b.square.id)},
+    {orderLabel:"VISITANTE — CASA",records:[...records].sort((a,b)=>a.visitor-b.visitor||a.home-b.home||a.square.id-b.square.id)},
+    {orderLabel:"JUGADOR — VISITANTE — CASA",records:[...records].sort((a,b)=>(a.square.participant||"Sin jugador").localeCompare(b.square.participant||"Sin jugador","es",{sensitivity:"base",numeric:true})||a.visitor-b.visitor||a.home-b.home||a.square.id-b.square.id)},
   ];
   const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
   const navy="#061b3e",blue="#123a78",gold="#f7b500",cream="#fff8e5",line="#d8dee8",muted="#66758a",white="#ffffff";
