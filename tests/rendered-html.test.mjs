@@ -44,5 +44,5 @@ test("treasury status is persisted, restricted and rendered in blue", async () =
   assert.match(boardApi, /treasury_by_name/);
   assert.match(boardApi, /actor\.role === "user"[^\n]+\["paid", "treasury"\]/);
   assert.match(styles, /\.square\.treasury\s*\{[^}]*background:var\(--blue\)/);
-  assert.match(styles, /\.square-modal\s*\{[^}]*zoom:\.88/);
+  assert.match(styles, /@media\(max-width:700px\)[\s\S]*\.square-modal\s*\{[^}]*zoom:\.78/);
 });
