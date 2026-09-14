@@ -91,5 +91,8 @@ test("square detail PDF includes branding, date and visitor-home ordering", asyn
   assert.match(page, /logo-crjc-white-gold\.png[\s\S]*logo-monday-night-football\.png[\s\S]*lema-rotario-2026-2027\.png/);
   assert.match(page, /\{day:"2-digit",month:"long",year:"numeric"\}/);
   assert.match(page, /CASILLA[\s\S]*VISITANTE[\s\S]*CASA[\s\S]*JUGADOR[\s\S]*SOCIO/);
+  assert.match(page, /records\.length>50\?2:1/);
+  assert.match(page, /Math\.ceil\(records\.length\/pages\)/);
+  assert.match(page, /\$\{records\.length\} CASILLAS[\s\S]*GENERADO EL/);
   assert.match(styles, /\.detail-pdf-button/);
 });
