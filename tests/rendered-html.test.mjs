@@ -100,3 +100,12 @@ test("square detail PDF includes branding, date and visitor-home ordering", asyn
   assert.match(page, /\$\{records\.length\} CASILLAS[\s\S]*GENERADO EL/);
   assert.match(styles, /\.detail-pdf-button/);
 });
+
+test("square dialog separates and highlights visitor and home game numbers", async () => {
+  const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /className="visitor-number"[\s\S]*<span>Visitante<\/span><em>\{visitorDigit\}<\/em>/);
+  assert.match(page, /className="home-number"[\s\S]*<span>Casa<\/span><em>\{homeDigit\}<\/em>/);
+  assert.match(styles, /\.square-matchup b \{[\s\S]*gap:9px/);
+  assert.match(styles, /\.visitor-number>em \{ color:var\(--gold\)/);
+  assert.match(styles, /\.home-number>em \{ color:#7ce6ad/);
+});
