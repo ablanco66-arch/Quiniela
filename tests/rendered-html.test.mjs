@@ -46,4 +46,7 @@ test("treasury status is persisted, restricted and rendered in blue", async () =
   assert.match(styles, /--treasury-blue:#2595ff/);
   assert.match(styles, /\.square\.treasury\s*\{[^}]*background:var\(--treasury-blue\)/);
   assert.match(styles, /@media\(max-width:700px\)[\s\S]*\.square-modal\s*\{[^}]*zoom:\.78/);
+  assert.match(page, /type ReportRow = \{ name:string; reserved:number; paid:number; treasury:number; total:number \}/);
+  assert.match(page, /<th>En Tesorería<\/th>/);
+  assert.match(page, /\[row\.treasury,865,blue\]/);
 });
