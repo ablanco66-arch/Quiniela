@@ -103,6 +103,7 @@ test("square detail PDF includes branding, date and visitor-home ordering", asyn
 
 test("square dialog separates and highlights visitor and home game numbers", async () => {
   const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.doesNotMatch(page, /Nombre de quien juega<input autoFocus/);
   assert.match(page, /className="visitor-number"[\s\S]*<span>Visitante<\/span><em>\{visitorDigit\}<\/em>/);
   assert.match(page, /className="home-number"[\s\S]*<span>Casa<\/span><em>\{homeDigit\}<\/em>/);
   assert.match(styles, /\.square-matchup b \{[\s\S]*align-items:center[\s\S]*gap:9px/);
