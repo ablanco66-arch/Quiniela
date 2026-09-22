@@ -110,3 +110,20 @@ test("square dialog separates and highlights visitor and home game numbers", asy
   assert.match(styles, /\.visitor-number>em \{ color:var\(--gold\)/);
   assert.match(styles, /\.home-number>em \{ color:#7ce6ad/);
 });
+
+test("winner flyer is available in Spanish and English", async () => {
+  const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+
+  assert.match(page, /"winner" \| "winner-en"/);
+  assert.match(page, /onGenerateWinnerFlyer\(winner,"es"\)/);
+  assert.match(page, /onGenerateWinnerFlyer\(winner,"en"\)/);
+  assert.match(page, /Generate winner flyer in English/);
+  assert.match(page, /WE HAVE A WINNER!/);
+  assert.match(page, /FINAL SCORE · OVERTIME INCLUDED/);
+  assert.match(page, /THANK YOU FOR PLAYING, WINNING AND HELPING!/);
+  assert.match(page, /rotary-motto-2026-2027-en\.png/);
+  assert.match(page, /mnf-football-pool-2026-winner-en\.png/);
+  assert.match(page, /We have an MNF winner!/);
+  assert.match(page, /const months:Record<string,string>=\{ene:"Jan"/);
+  assert.match(styles, /\.winner-flyer-button-en/);
+});
