@@ -125,5 +125,7 @@ test("winner flyer is available in Spanish and English", async () => {
   assert.match(page, /mnf-football-pool-2026-winner-en\.png/);
   assert.match(page, /We have an MNF winner!/);
   assert.match(page, /const months:Record<string,string>=\{ene:"Jan"/);
+  assert.match(page, /mottoAreaTop=1708,mottoAreaBottom=1888/);
+  assert.match(page, /mottoScale=Math\.min\(mottoMaxW\/motto\.width,mottoMaxH\/motto\.height\)/);
   assert.match(styles, /\.winner-flyer-button-en/);
 });

@@ -519,7 +519,7 @@ async function createWinnerFlyer({result,game,square,visitorDigit,homeDigit,seas
   roundedBox(ctx,155,1382,770,84,20,"#ffffff12",gold,2);ctx.fillStyle=cream;ctx.font=`700 22px ${bodyFont}`;ctx.fillText(`${copy.visitor} ${visitorDigit}  ×  ${copy.home} ${homeDigit}  =  ${copy.square} #${square.id}`,540,1434);
   ctx.fillStyle="#aebed3";ctx.font=`800 18px ${bodyFont}`;ctx.fillText(copy.soldBy,540,1516);ctx.fillStyle=white;const seller=(square.reservedByName||square.contact||"ROTARY JUÁREZ CONCORDIA").toUpperCase();canvasFontToFit(ctx,seller,800,35,sportFont,20);ctx.fillText(seller,540,1562);
   ctx.fillStyle=gold;canvasFontToFit(ctx,copy.thanks,900,31,sportFont,20);ctx.fillText(copy.thanks,540,1642);ctx.fillStyle="#d5deeb";ctx.font=`600 22px ${bodyFont}`;ctx.fillText(copy.impact,540,1682);
-  const mottoW=365,mottoH=mottoW*(motto.height/motto.width);ctx.drawImage(motto,(1080-mottoW)/2,1710,mottoW,mottoH);
+  const mottoAreaTop=1708,mottoAreaBottom=1888,mottoMaxW=365,mottoMaxH=mottoAreaBottom-mottoAreaTop,mottoScale=Math.min(mottoMaxW/motto.width,mottoMaxH/motto.height),mottoW=motto.width*mottoScale,mottoH=motto.height*mottoScale,mottoY=mottoAreaTop+(mottoMaxH-mottoH)/2;ctx.drawImage(motto,(1080-mottoW)/2,mottoY,mottoW,mottoH);
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob((value)=>value?resolve(value):reject(new Error("No se pudo crear la imagen")),"image/png"));return{blob,url:canvas.toDataURL("image/png")};
 }
 
