@@ -138,3 +138,13 @@ test("winners tab is located in the Games section", async () => {
   assert.match(page, /gamesView==="winners"&&<div className="winners-view">/);
   assert.doesNotMatch(page, /reportView==="winners"/);
 });
+
+test("winner report uses optimized fixed column widths", async () => {
+  const styles = await read("app/globals.css");
+
+  assert.match(styles, /\.winners-table \{[^}]*min-width:1080px;table-layout:fixed/);
+  assert.match(styles, /\.winners-table th:nth-child\(5\) \{ width:22%/);
+  assert.match(styles, /\.winners-table th:nth-child\(8\) \{ width:15%/);
+  assert.match(styles, /\.winners-table th:nth-child\(2\) \{ width:6%/);
+  assert.match(styles, /\.final-score \{[^}]*min-width:0/);
+});
