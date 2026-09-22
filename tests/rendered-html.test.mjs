@@ -129,3 +129,12 @@ test("winner flyer is available in Spanish and English", async () => {
   assert.match(page, /mottoScale=Math\.min\(mottoMaxW\/motto\.width,mottoMaxH\/motto\.height\)/);
   assert.match(styles, /\.winner-flyer-button-en/);
 });
+
+test("winners tab is located in the Games section", async () => {
+  const page = await read("app/page.tsx");
+
+  assert.match(page, /function Games\([\s\S]*useState<"calendar"\|"winners">\("calendar"\)/);
+  assert.match(page, /gamesView==="calendar"[\s\S]*>Juegos<\/button><button[\s\S]*gamesView==="winners"[\s\S]*>Ganadores<\/button>/);
+  assert.match(page, /gamesView==="winners"&&<div className="winners-view">/);
+  assert.doesNotMatch(page, /reportView==="winners"/);
+});
