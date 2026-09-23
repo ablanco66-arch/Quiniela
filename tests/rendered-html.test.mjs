@@ -171,7 +171,7 @@ test("report tables keep their identifying first column fixed", async () => {
 });
 
 test("administrative sections live in the Ajustes tab in the requested order", async () => {
-  const page = await read("app/page.tsx");
+  const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
 
   assert.match(page, /tab === "settings" \? "active" : ""[\s\S]*>⚙<\/span> Ajustes<\/button>/);
   assert.match(page, /: "Reportes"}<\/button>[\s\S]*>i<\/span> Reglas<\/button>[\s\S]*>⚙<\/span> Ajustes<\/button>/);
@@ -180,4 +180,7 @@ test("administrative sections live in the Ajustes tab in the requested order", a
   assert.match(page, /useState<"access"\|"season"\|"activity">\("access"\)/);
   assert.match(page, />Accesos[\s\S]*<\/button><button[\s\S]*>Temporada<\/button><button[\s\S]*>Actividad<\/button>/);
   assert.doesNotMatch(page, /reportView==="activity"|reportView==="access"|reportView==="season"/);
+  assert.match(styles, /@media\(max-width:700px\)\{[\s\S]*\.member-list article \{ min-height:44px;grid-template-columns:minmax\(0,1fr\) auto auto/);
+  assert.match(styles, /\.member-list article \.member-actions \{ grid-column:auto;display:flex;flex-wrap:nowrap/);
+  assert.match(styles, /\.member-list \.member-actions button \{ width:26px;height:26px;padding:0;font-size:0/);
 });

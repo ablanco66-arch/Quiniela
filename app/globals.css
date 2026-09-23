@@ -145,7 +145,15 @@ footer { background:linear-gradient(90deg,#020817f7,#0b3268f2);border-top:5px so
 .pending-count { display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:7px;padding:0 5px;border-radius:999px;background:#d88a00;color:#fff;font-size:9px; }.member-form input:read-only,.member-form input:disabled { background:#eef1f5;color:#6f7a8c; }.member-list article.member-pending { background:#fff8df;box-shadow:inset 4px 0 0 var(--gold); }.member-list article>span.member-awaiting { display:inline-flex;justify-content:center;border-radius:999px;padding:7px 8px;font-weight:900;text-transform:uppercase;background:#fff0b8;color:#7f5b00; }.member-actions { display:flex;justify-content:flex-end;gap:4px; }.member-actions button { white-space:nowrap;padding-left:7px;padding-right:7px;font-size:7px; }.member-approve { background:#dff4e9;color:#157a49; }
 
 @media(max-width:700px){
-  .auth-card { padding:22px 18px 24px; }.auth-card img { width:185px;height:78px; }.auth-card h1 { font-size:28px; }.member-list article { grid-template-columns:minmax(105px,1fr) 76px; }.member-list article .member-actions { grid-column:1/-1;justify-content:flex-end; }.member-list article>span { justify-self:end; }
+  .auth-card { padding:22px 18px 24px; }.auth-card img { width:185px;height:78px; }.auth-card h1 { font-size:28px; }
+  .member-list article { min-height:44px;grid-template-columns:minmax(0,1fr) auto auto;padding:7px 8px;gap:5px; }
+  .member-list article>div:first-child { min-width:0;flex-direction:row;align-items:baseline;gap:5px;overflow:hidden;white-space:nowrap; }
+  .member-list article strong { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px; }
+  .member-list article>div:first-child span { flex:0 1 auto;max-width:72px;white-space:nowrap;font-size:7px; }
+  .member-list article>span { max-width:none;justify-self:auto;white-space:nowrap;padding:5px 6px!important;font-size:7px; }
+  .member-list article .member-actions { grid-column:auto;display:flex;flex-wrap:nowrap;justify-content:flex-end;gap:3px; }
+  .member-list .member-actions button { width:26px;height:26px;padding:0;font-size:0; }
+  .member-list .member-approve:before { content:"✓";font-size:13px; }.member-list .member-edit:before { content:"✎";font-size:13px; }.member-list .member-remove:before { content:"×";font-size:15px; }
   .auth-form input { font-size:16px;line-height:1.25; }
 }
 
