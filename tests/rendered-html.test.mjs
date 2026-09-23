@@ -47,7 +47,7 @@ test("treasury status is persisted, restricted and rendered in blue", async () =
   assert.match(styles, /\.square\.treasury\s*\{[^}]*background:var\(--treasury-blue\)/);
   assert.match(styles, /@media\(max-width:700px\)[\s\S]*\.square-modal\s*\{[^}]*zoom:\.78/);
   assert.match(page, /type ReportRow = \{ name:string; reserved:number; paid:number; treasury:number; total:number \}/);
-  assert.match(page, /<th>Tesorería<\/th>/);
+  assert.match(page, /\['treasury','Tesorería'\]/);
   assert.match(page, /\[row\.treasury,855,blue\]/);
   assert.match(page, /\[510,652,787,925\]\.forEach/);
 });
@@ -147,4 +147,16 @@ test("winner report uses optimized fixed column widths", async () => {
   assert.match(styles, /\.winners-table th:nth-child\(8\) \{ width:15%/);
   assert.match(styles, /\.winners-table th:nth-child\(2\) \{ width:6%/);
   assert.match(styles, /\.final-score \{[^}]*min-width:0/);
+});
+
+test("member summary sorts every column and detail keeps square fixed", async () => {
+  const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+
+  assert.match(page, /type ReportSortKey = keyof ReportRow/);
+  assert.match(page, /useState<\{key:ReportSortKey;direction:"asc"\|"desc"\}>\(\{key:"total",direction:"desc"\}\)/);
+  assert.match(page, /\[\['name','Socio'\],\['reserved','Reservada'\],\['paid','Pagada'\],\['treasury','Tesorería'\],\['total','Total'\]\]/);
+  assert.match(page, /aria-sort=\{summarySort\.key===key/);
+  assert.match(styles, /\.drilldown-table \{[^}]*min-width:650px;table-layout:fixed;border-collapse:separate/);
+  assert.match(styles, /\.drilldown-table th:nth-child\(1\) \{ width:82px;left:0;z-index:4/);
+  assert.match(styles, /\.drilldown-table td:first-child \{ position:sticky;left:0/);
 });
