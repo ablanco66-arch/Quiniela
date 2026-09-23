@@ -160,3 +160,12 @@ test("member summary sorts every column and detail keeps square fixed", async ()
   assert.match(styles, /\.drilldown-table th:nth-child\(1\) \{ width:82px;left:0;z-index:4/);
   assert.match(styles, /\.drilldown-table td:first-child \{ position:sticky;left:0/);
 });
+
+test("report tables keep their identifying first column fixed", async () => {
+  const styles = await read("app/globals.css");
+
+  assert.match(styles, /\.report-table th:first-child \{ position:sticky;left:0;z-index:3/);
+  assert.match(styles, /\.report-table td:first-child \{ position:sticky;left:0;z-index:1/);
+  assert.match(styles, /\.all-squares-table th:first-child \{ left:0;z-index:4;width:82px/);
+  assert.match(styles, /\.all-squares-table td:first-child \{ position:sticky;left:0;z-index:1/);
+});
