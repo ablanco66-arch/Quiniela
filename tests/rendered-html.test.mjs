@@ -176,7 +176,7 @@ test("administrative sections live in the Ajustes tab in the requested order", a
   assert.match(page, /tab === "settings" \? "active" : ""[\s\S]*>⚙<\/span> Ajustes<\/button>/);
   assert.match(page, /tab === "settings" && me\?\.role === "admin"[\s\S]*<Settings/);
   assert.match(page, /function Settings\(/);
-  assert.match(page, /useState<"season"\|"access"\|"activity">\("season"\)/);
-  assert.match(page, />Temporada<\/button><button[\s\S]*>Accesos[\s\S]*<\/button><button[\s\S]*>Actividad<\/button>/);
+  assert.match(page, /useState<"access"\|"season"\|"activity">\("access"\)/);
+  assert.match(page, />Accesos[\s\S]*<\/button><button[\s\S]*>Temporada<\/button><button[\s\S]*>Actividad<\/button>/);
   assert.doesNotMatch(page, /reportView==="activity"|reportView==="access"|reportView==="season"/);
 });

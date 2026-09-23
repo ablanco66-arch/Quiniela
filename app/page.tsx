@@ -441,14 +441,14 @@ function Reports({ rows, squares, visitorDigits, homeDigits, me, season, generat
 }
 
 function Settings({season,seasonArchives,members,activity,me,saving,onSaveMember,onRemoveMember,onSaveSeason}:{season:SeasonConfig;seasonArchives:SeasonArchive[];members:Member[];activity:Activity[];me:Member;saving:boolean;onSaveMember:(member:Member,originalEmail?:string)=>Promise<boolean>;onRemoveMember:(member:Member)=>Promise<boolean>;onSaveSeason:(season:SeasonConfig,activate?:boolean)=>Promise<boolean>}){
-  const [settingsView,setSettingsView]=useState<"season"|"access"|"activity">("season");
+  const [settingsView,setSettingsView]=useState<"access"|"season"|"activity">("access");
   const [draft,setDraft]=useState<Member>({email:"",name:"",username:"",tempPassword:"",role:"user",active:1,approvalStatus:"approved"});
   const [showTempPassword,setShowTempPassword]=useState(false);
   const [editingEmail,setEditingEmail]=useState("");
   const pendingCount=members.filter((member)=>member.approvalStatus==="pending").length;
   const resetMemberForm=()=>{setDraft({email:"",name:"",username:"",tempPassword:"",role:"user",active:1,approvalStatus:"approved"});setEditingEmail("");setShowTempPassword(false);};
   return <section className="content settings-section"><div className="section-heading"><div><p className="kicker">Administración</p><h3>Ajustes</h3></div><span className="year-pill">{season.name}</span></div>
-    <div className="report-switch settings-switch"><button className={settingsView==="season"?"active":""} onClick={()=>setSettingsView("season")}>Temporada</button><button className={settingsView==="access"?"active":""} onClick={()=>setSettingsView("access")}>Accesos{pendingCount>0&&<b className="pending-count">{pendingCount}</b>}</button><button className={settingsView==="activity"?"active":""} onClick={()=>setSettingsView("activity")}>Actividad</button></div>
+    <div className="report-switch settings-switch"><button className={settingsView==="access"?"active":""} onClick={()=>setSettingsView("access")}>Accesos{pendingCount>0&&<b className="pending-count">{pendingCount}</b>}</button><button className={settingsView==="season"?"active":""} onClick={()=>setSettingsView("season")}>Temporada</button><button className={settingsView==="activity"?"active":""} onClick={()=>setSettingsView("activity")}>Actividad</button></div>
     {settingsView==="season"&&<SeasonManager season={season} archives={seasonArchives} saving={saving} onSave={onSaveSeason}/>}
     {settingsView==="access"&&<div className="access-management"><div className="member-form report-card"><div className="report-card-head"><div><h4>{editingEmail?"Editar acceso":"Crear cuenta propia"}</h4><p>{draft.approvalStatus==="pending"?"Revisa la solicitud, asigna el nivel y aprueba al nuevo usuario.":editingEmail?"Actualiza el nivel, estado o asigna una nueva contraseña temporal.":"Crea el usuario y comparte la contraseña temporal de forma privada."}</p></div>{editingEmail&&<button className="form-cancel" onClick={resetMemberForm}>Cancelar</button>}</div><div className="member-form-grid">
       <label>Nombre<input value={draft.name} onChange={(e)=>setDraft({...draft,name:e.target.value})} placeholder="Nombre del socio"/></label>
