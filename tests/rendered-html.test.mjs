@@ -169,3 +169,14 @@ test("report tables keep their identifying first column fixed", async () => {
   assert.match(styles, /\.all-squares-table th:first-child \{ left:0;z-index:4;width:82px/);
   assert.match(styles, /\.all-squares-table td:first-child \{ position:sticky;left:0;z-index:1/);
 });
+
+test("administrative sections live in the Ajustes tab in the requested order", async () => {
+  const page = await read("app/page.tsx");
+
+  assert.match(page, /tab === "settings" \? "active" : ""[\s\S]*>⚙<\/span> Ajustes<\/button>/);
+  assert.match(page, /tab === "settings" && me\?\.role === "admin"[\s\S]*<Settings/);
+  assert.match(page, /function Settings\(/);
+  assert.match(page, /useState<"season"\|"access"\|"activity">\("season"\)/);
+  assert.match(page, />Temporada<\/button><button[\s\S]*>Accesos[\s\S]*<\/button><button[\s\S]*>Actividad<\/button>/);
+  assert.doesNotMatch(page, /reportView==="activity"|reportView==="access"|reportView==="season"/);
+});
