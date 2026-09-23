@@ -174,6 +174,7 @@ test("administrative sections live in the Ajustes tab in the requested order", a
   const page = await read("app/page.tsx");
 
   assert.match(page, /tab === "settings" \? "active" : ""[\s\S]*>⚙<\/span> Ajustes<\/button>/);
+  assert.match(page, /: "Reportes"}<\/button>[\s\S]*>i<\/span> Reglas<\/button>[\s\S]*>⚙<\/span> Ajustes<\/button>/);
   assert.match(page, /tab === "settings" && me\?\.role === "admin"[\s\S]*<Settings/);
   assert.match(page, /function Settings\(/);
   assert.match(page, /useState<"access"\|"season"\|"activity">\("access"\)/);

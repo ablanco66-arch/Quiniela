@@ -287,8 +287,8 @@ export default function Home() {
       <button className={tab === "board" ? "active" : ""} onClick={openBoard} disabled={refreshingBoard} aria-busy={refreshingBoard}><span>▦</span> {refreshingBoard ? "Actualizando…" : "Tablero"}</button>
       <button className={tab === "games" ? "active" : ""} onClick={() => setTab("games")}><span>◷</span> Juegos</button>
       <button className={tab === "reports" ? "active" : ""} onClick={openReports} disabled={refreshingReports} aria-busy={refreshingReports}><span>≡</span> {refreshingReports ? "Actualizando…" : "Reportes"}</button>
-      {me?.role === "admin" && <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><span>⚙</span> Ajustes</button>}
       <button className={tab === "rules" ? "active" : ""} onClick={() => setTab("rules")}><span>i</span> Reglas</button>
+      {me?.role === "admin" && <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}><span>⚙</span> Ajustes</button>}
     </nav>
 
     {notice && <button className="notice" onClick={() => setNotice("")} aria-label="Cerrar aviso">{notice}<span>×</span></button>}
