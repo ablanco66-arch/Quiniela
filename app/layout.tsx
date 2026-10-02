@@ -21,6 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Quiniela MNF 2026 | Rotary Juárez Concordia",
     description: "Tablero interactivo de la quiniela Monday Night Football 2026 de Rotary Juárez Concordia.",
+    icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml" }], shortcut: "/favicon.svg" },
     openGraph: { title: "Quiniela MNF 2026", description: "17 juegos · 100 casillas · una gran causa", images: [{ url: image, width: 1536, height: 1024 }] },
     twitter: { card: "summary_large_image", title: "Quiniela MNF 2026", description: "17 juegos · 100 casillas · una gran causa", images: [image] },
   };

@@ -32,6 +32,16 @@ test("application source contains production branding and no starter preview", a
   assert.doesNotMatch(page + layout + styles, /codex-preview|SkeletonPreview|react-loading-skeleton/);
 });
 
+test("browser favicon is a transparent American football", async () => {
+  const [layout, favicon] = await Promise.all([read("app/layout.tsx"), read("public/favicon.svg")]);
+
+  assert.match(layout, /icons: \{ icon: \[\{ url: "\/favicon\.svg", type: "image\/svg\+xml" \}\], shortcut: "\/favicon\.svg" \}/);
+  assert.match(favicon, /rotate\(-25 32 32\)/);
+  assert.match(favicon, /fill="#9A4B23"/);
+  assert.match(favicon, /stroke="#FFF9EC"/);
+  assert.doesNotMatch(favicon, /<rect|background/);
+});
+
 test("treasury status is persisted, restricted and rendered in blue", async () => {
   const [page, boardApi, styles] = await Promise.all([
     read("app/page.tsx"),
