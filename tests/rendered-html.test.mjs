@@ -196,7 +196,7 @@ test("administrative sections live in the Ajustes tab in the requested order", a
 });
 
 test("NFL results automation is secure, idempotent and visibly tracked", async () => {
-  const [automation, mcp, board, page, hosting, schema, migration] = await Promise.all([
+  const [automation, mcp, board, page, hosting, schema, migration, oidc, endpoint, workflow] = await Promise.all([
     read("lib/nfl-results.ts"),
     read("app/mcp/route.ts"),
     read("app/api/board/route.ts"),
@@ -204,6 +204,9 @@ test("NFL results automation is secure, idempotent and visibly tracked", async (
     read(".openai/hosting.json"),
     read("db/schema.ts"),
     read("drizzle/0010_glorious_vermin.sql"),
+    read("lib/github-oidc.ts"),
+    read("app/api/automation/nfl-results/route.ts"),
+    read(".github/workflows/sync-nfl-results.yml"),
   ]);
 
   assert.match(automation, /BALLDONTLIE_API_KEY/);
@@ -220,4 +223,10 @@ test("NFL results automation is secure, idempotent and visibly tracked", async (
   assert.match(board, /nflSync:nflSyncResult\.results/);
   assert.match(page, /Resultado listo para enviar/);
   assert.match(page, /nflSyncLabel/);
+  assert.match(oidc, /EXPECTED_WORKFLOW=.*sync-nfl-results\.yml@refs\/heads\/main/);
+  assert.match(oidc, /RSASSA-PKCS1-v1_5/);
+  assert.match(endpoint, /verifyGitHubActionsToken/);
+  assert.match(workflow, /cron: "\*\/5 4-11 \* \* 2"/);
+  assert.match(workflow, /id-token: write/);
+  assert.doesNotMatch(workflow, /BALLDONTLIE_API_KEY/);
 });

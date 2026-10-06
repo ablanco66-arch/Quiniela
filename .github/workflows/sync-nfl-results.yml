@@ -1,0 +1,41 @@
+name: Sincronizar resultados MNF
+
+on:
+  schedule:
+    # Cubre 22:00–04:59 en Ciudad Juárez tanto en horario de verano como de invierno.
+    - cron: "*/5 4-11 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sync-nfl-results
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Obtener credencial de ejecución
+        id: oidc
+        shell: bash
+        run: |
+          response="$(curl --fail --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fquiniela-mnf-2026.ablanco66.chatgpt.site")"
+          token="$(jq -r '.value' <<<"${response}")"
+          test -n "${token}" && test "${token}" != "null"
+          echo "::add-mask::${token}"
+          echo "token=${token}" >> "${GITHUB_OUTPUT}"
+      - name: Revisar marcadores de la quiniela
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H "Content-Type: application/json" \
+            https://quiniela-mnf-2026.ablanco66.chatgpt.site/api/automation/nfl-results

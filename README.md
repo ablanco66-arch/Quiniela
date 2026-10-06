@@ -102,6 +102,8 @@ El sitio expone la herramienta MCP `sync_nfl_results` para las ejecuciones progr
 - Los estados aplazado, demorado, suspendido, cancelado, desconocido o sin coincidencia exacta no generan resultados.
 - Las escrituras son repetibles de forma segura: un resultado existente nunca se sustituye silenciosamente. Una diferencia se marca como `review_required`.
 - Los resultados confirmados se guardan en `game_results` y el seguimiento en `nfl_result_tracking`. La interfaz muestra los flyers ES/EN listos para generarse y compartirse.
+- GitHub Actions ejecuta la revisión cada cinco minutos durante la ventana nocturna. Se autentica contra el endpoint del sitio mediante OIDC, restringido al workflow de `main`, por lo que no requiere guardar otra clave.
+- Una tarea horaria de Sites revisa el mismo estado y notifica cuando los resultados quedan confirmados o requieren atención; no envía WhatsApp automáticamente.
 - Cada ejecución devuelve un resumen estructurado. Para verificar el flujo, ejecute la herramienta desde la conexión del Site y confirme después que el estado aparece en Juegos.
 
 ## Learn More
