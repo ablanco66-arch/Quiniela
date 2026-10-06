@@ -22,6 +22,7 @@ interface D1Database {
 
 interface CloudflareEnv {
   DB: D1Database;
+  BALLDONTLIE_API_KEY?: string;
 }
 
 declare module "cloudflare:workers" {

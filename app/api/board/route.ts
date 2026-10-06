@@ -112,19 +112,20 @@ export async function GET(request: Request) {
   try {
     const actor = await getActor(request);
     if (actor instanceof Response) return actor;
-    const [squareResult, settings, memberResult, activityResult, gameResult, archiveResult] = await Promise.all([
+    const [squareResult, settings, memberResult, activityResult, gameResult, archiveResult, nflSyncResult] = await Promise.all([
       env.DB.prepare(`SELECT id, status, participant, contact, reserved_by_email AS reservedByEmail, reserved_by_name AS reservedByName, reserved_at AS reservedAt, paid_by_email AS paidByEmail, paid_by_name AS paidByName, paid_at AS paidAt, treasury_by_email AS treasuryByEmail, treasury_by_name AS treasuryByName, treasury_at AS treasuryAt FROM squares ORDER BY id`).all(),
       env.DB.prepare("SELECT visitor_digits AS visitorDigits, home_digits AS homeDigits, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, payment_deadline AS paymentDeadline, games_json AS gamesJson FROM settings WHERE id = 1").first<Record<string, string | number>>(),
       actor.role === "admin" ? env.DB.prepare(MEMBER_LIST_SQL).all() : Promise.resolve({ results: [] }),
       actor.role === "admin" ? env.DB.prepare("SELECT id, square_id AS squareId, action, actor_name AS actorName, actor_role AS actorRole, previous_status AS previousStatus, new_status AS newStatus, details, created_at AS createdAt FROM activity ORDER BY created_at DESC, id DESC LIMIT 60").all() : Promise.resolve({ results: [] }),
       env.DB.prepare("SELECT game_id AS gameId, visitor_score AS visitorScore, home_score AS homeScore, updated_by_name AS updatedByName, updated_at AS updatedAt FROM game_results ORDER BY game_id").all(),
       actor.role === "admin" ? env.DB.prepare("SELECT id, season_name AS seasonName, square_price AS squarePrice, game_prize AS gamePrize, games_json AS gamesJson, archived_at AS archivedAt FROM season_archives ORDER BY archived_at DESC, id DESC LIMIT 12").all() : Promise.resolve({ results: [] }),
+      env.DB.prepare("SELECT game_id AS gameId, provider_game_id AS providerGameId, scheduled_date AS scheduledDate, provider_status AS providerStatus, state, observed_visitor_score AS observedVisitorScore, observed_home_score AS observedHomeScore, first_final_at AS firstFinalAt, confirmed_at AS confirmedAt, last_checked_at AS lastCheckedAt, last_error AS lastError, attempts, flyers_ready AS flyersReady FROM nfl_result_tracking ORDER BY game_id").all(),
     ]);
     const games = parseGames(String(settings?.gamesJson ?? ""));
     const season = { name:String(settings?.seasonName ?? "2026"), squarePrice:Number(settings?.squarePrice ?? 100), gamePrize:Number(settings?.gamePrize ?? 300), paymentDeadline:String(settings?.paymentDeadline ?? "2026-09-14"), games };
     const noteResult = await env.DB.prepare(`SELECT ${NOTE_FIELDS} FROM square_notes WHERE season_name = ? ORDER BY created_at DESC, id DESC`).bind(season.name).all();
     const archives = (archiveResult.results as Array<Record<string, unknown>>).map((item) => ({ id:item.id, seasonName:item.seasonName, squarePrice:item.squarePrice, gamePrize:item.gamePrize, archivedAt:item.archivedAt, gameCount:parseGames(String(item.gamesJson ?? "")).length }));
-    return Response.json({ squares: squareResult.results, notes:noteResult.results, settings:{ visitorDigits:settings?.visitorDigits ?? "", homeDigits:settings?.homeDigits ?? "" }, season, archives, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results });
+    return Response.json({ squares: squareResult.results, notes:noteResult.results, settings:{ visitorDigits:settings?.visitorDigits ?? "", homeDigits:settings?.homeDigits ?? "" }, season, archives, me: actor, members: memberResult.results, activity: activityResult.results, gameResults: gameResult.results, nflSync:nflSyncResult.results });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "No fue posible cargar el tablero" }, { status: 500 });
   }

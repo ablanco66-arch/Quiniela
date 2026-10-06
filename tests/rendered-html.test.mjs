@@ -194,3 +194,30 @@ test("administrative sections live in the Ajustes tab in the requested order", a
   assert.match(styles, /\.member-list article \.member-actions \{ grid-column:auto;display:flex;flex-wrap:nowrap/);
   assert.match(styles, /\.member-list \.member-actions button \{ width:26px;height:26px;padding:0;font-size:0/);
 });
+
+test("NFL results automation is secure, idempotent and visibly tracked", async () => {
+  const [automation, mcp, board, page, hosting, schema, migration] = await Promise.all([
+    read("lib/nfl-results.ts"),
+    read("app/mcp/route.ts"),
+    read("app/api/board/route.ts"),
+    read("app/page.tsx"),
+    read(".openai/hosting.json"),
+    read("db/schema.ts"),
+    read("drizzle/0010_glorious_vermin.sql"),
+  ]);
+
+  assert.match(automation, /BALLDONTLIE_API_KEY/);
+  assert.match(automation, /status_state/);
+  assert.match(automation, /CONFIRMATION_DELAY_MS=5\*60\*1000/);
+  assert.match(automation, /ON CONFLICT\(game_id\) DO NOTHING/);
+  assert.match(automation, /Automatización de resultados/);
+  assert.match(automation, /America\/Ciudad_Juarez/);
+  assert.doesNotMatch(hosting, /BALLDONTLIE_API_KEY|api[_-]?key/i);
+  assert.match(mcp, /sync_nfl_results/);
+  assert.match(hosting, /"capabilities": \["mcp"\]/);
+  assert.match(schema, /nflResultTracking/);
+  assert.match(migration, /CREATE TABLE `nfl_result_tracking`/);
+  assert.match(board, /nflSync:nflSyncResult\.results/);
+  assert.match(page, /Resultado listo para enviar/);
+  assert.match(page, /nflSyncLabel/);
+});

@@ -71,6 +71,13 @@
       "when": 1789355367764,
       "tag": "0009_faulty_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1791265653976,
+      "tag": "0010_glorious_vermin",
+      "breakpoints": true
     }
   ]
 }

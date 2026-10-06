@@ -92,6 +92,18 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm test`: build the starter and verify its rendered loading skeleton
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
+## Automatización de resultados NFL
+
+El sitio expone la herramienta MCP `sync_nfl_results` para las ejecuciones programadas. La herramienta consulta exclusivamente los juegos configurados en la temporada activa, usando BALLDONTLIE y la zona horaria `America/Ciudad_Juarez`.
+
+- La clave se obtiene del secreto de producción `BALLDONTLIE_API_KEY`; nunca debe guardarse en el repositorio ni en el texto de una programación.
+- La ventana operativa inicia los lunes a las 22:00 y termina los martes a las 04:59, hora de Ciudad Juárez.
+- Un marcador sólo se confirma después de dos lecturas `final` idénticas separadas por al menos cinco minutos.
+- Los estados aplazado, demorado, suspendido, cancelado, desconocido o sin coincidencia exacta no generan resultados.
+- Las escrituras son repetibles de forma segura: un resultado existente nunca se sustituye silenciosamente. Una diferencia se marca como `review_required`.
+- Los resultados confirmados se guardan en `game_results` y el seguimiento en `nfl_result_tracking`. La interfaz muestra los flyers ES/EN listos para generarse y compartirse.
+- Cada ejecución devuelve un resumen estructurado. Para verificar el flujo, ejecute la herramienta desde la conexión del Site y confirme después que el estado aparece en Juegos.
+
 ## Learn More
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)

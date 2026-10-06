@@ -99,3 +99,19 @@ export const gameResults = sqliteTable("game_results", {
   updatedByName: text("updated_by_name").notNull().default(""),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const nflResultTracking = sqliteTable("nfl_result_tracking", {
+  gameId: integer("game_id").primaryKey(),
+  providerGameId: integer("provider_game_id"),
+  scheduledDate: text("scheduled_date").notNull().default(""),
+  providerStatus: text("provider_status").notNull().default(""),
+  state: text("state").notNull().default("pending"),
+  observedVisitorScore: integer("observed_visitor_score"),
+  observedHomeScore: integer("observed_home_score"),
+  firstFinalAt: text("first_final_at").notNull().default(""),
+  confirmedAt: text("confirmed_at").notNull().default(""),
+  lastCheckedAt: text("last_checked_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0),
+  flyersReady: integer("flyers_ready").notNull().default(0),
+}, (table) => [index("nfl_result_tracking_state_date_idx").on(table.state, table.scheduledDate)]);
