@@ -1,6 +1,13 @@
 name: Sincronizar resultados MNF
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/sync-nfl-results.yml"
+      - "app/api/automation/nfl-results/route.ts"
+      - "lib/github-oidc.ts"
+      - "lib/nfl-results.ts"
   schedule:
     # Cubre 22:00–04:59 en Ciudad Juárez tanto en horario de verano como de invierno.
     - cron: "*/5 4-11 * * 2"

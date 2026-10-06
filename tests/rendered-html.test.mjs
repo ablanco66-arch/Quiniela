@@ -227,6 +227,7 @@ test("NFL results automation is secure, idempotent and visibly tracked", async (
   assert.match(oidc, /RSASSA-PKCS1-v1_5/);
   assert.match(endpoint, /verifyGitHubActionsToken/);
   assert.match(workflow, /cron: "\*\/5 4-11 \* \* 2"/);
+  assert.match(workflow, /push:[\s\S]*branches: \[main\]/);
   assert.match(workflow, /id-token: write/);
   assert.doesNotMatch(workflow, /BALLDONTLIE_API_KEY/);
 });

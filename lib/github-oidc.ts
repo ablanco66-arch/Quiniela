@@ -29,7 +29,7 @@ export async function verifyGitHubActionsToken(authorization:string|null){
   if(claims.iss!==ISSUER||!audiences.includes(EXPECTED_AUDIENCE))throw new Error("Emisor o audiencia OIDC inválidos");
   if(!claims.exp||claims.exp<now||typeof claims.nbf==="number"&&claims.nbf>now+30)throw new Error("Credencial OIDC vencida o prematura");
   if(claims.repository!=="ablanco66-arch/Quiniela"||claims.ref!=="refs/heads/main"||claims.workflow_ref!==EXPECTED_WORKFLOW)throw new Error("Flujo de GitHub no autorizado");
-  if(claims.event_name!=="schedule"&&claims.event_name!=="workflow_dispatch")throw new Error("Evento de GitHub no autorizado");
+  if(!["schedule","workflow_dispatch","push"].includes(claims.event_name??""))throw new Error("Evento de GitHub no autorizado");
   return claims;
 }
 
