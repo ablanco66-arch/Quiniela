@@ -717,12 +717,24 @@ function activityIcon(action:string){ return action==="paid"?"$":action==="treas
 function activityText(item:Activity){ if(item.action==="paid")return `marcó como pagada la casilla ${item.squareId}`;if(item.action==="treasury")return `registró en Tesorería la casilla ${item.squareId}`;if(item.action==="reserved")return `reservó la casilla ${item.squareId} para ${item.details}`;if(item.action==="released")return `liberó la casilla ${item.squareId}`;if(item.action==="member_updated")return `actualizó el acceso de ${item.details}`;if(item.action==="member_removed")return `retiró el acceso de ${item.details}`;if(item.action==="numbers_updated")return "actualizó los números de juego";if(item.action==="game_result_updated")return `registró el resultado: ${item.details}`;if(item.action==="game_result_cleared")return `eliminó el resultado del ${item.details}`;if(item.action==="game_results_cleared")return `eliminó todos los marcadores: ${item.details}`;if(item.action==="season_updated")return `actualizó la temporada: ${item.details}`;if(item.action==="season_activated")return `activó la nueva temporada: ${item.details}`;return `actualizó la casilla ${item.squareId}`; }
 function formatNoteDate(value:string){ try{return new Intl.DateTimeFormat("es-MX",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}catch{return value;} }
 function formatDate(value:string){ try{return new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}catch{return value;} }
+function formatNflQueryDate(value:string){const [year,month,day]=value.split("-").map(Number);if(!year||!month||!day)return value;return new Intl.DateTimeFormat("es-MX",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date(year,month-1,day));}
+function nflQueryState(state:string,status:string){
+  const value=`${state} ${status}`.trim().toLowerCase();
+  if(/final|post|complete|closed/.test(value))return{className:"final",label:"Final"};
+  if(/progress|live|in game|half|quarter|overtime|\bot\b/.test(value))return{className:"live",label:/overtime|\bot\b/.test(value)?"Tiempo extra":"En curso"};
+  if(/delay/.test(value))return{className:"delayed",label:"Demorado"};
+  if(/postpon/.test(value))return{className:"delayed",label:"Aplazado"};
+  if(/cancel/.test(value))return{className:"cancelled",label:"Cancelado"};
+  if(/suspend/.test(value))return{className:"delayed",label:"Suspendido"};
+  if(/scheduled|pre/.test(value))return{className:"scheduled",label:"Programado"};
+  return{className:"unknown",label:status||"Sin estado"};
+}
 
 function NflDateQuery(){
   const [date,setDate]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
-  const [result,setResult]=useState<{date:string;queriedAt:string;message:string;games:Array<{id:number;visitor:string;home:string;visitorScore:number|null;homeScore:number|null;status:string;localTime:string}>}|null>(null);
+  const [result,setResult]=useState<{date:string;queriedAt:string;message:string;games:Array<{id:number;visitor:string;home:string;visitorScore:number|null;homeScore:number|null;status:string;state:string;localTime:string}>}|null>(null);
   async function query(event:FormEvent){
     event.preventDefault();setLoading(true);setError("");setResult(null);
     try{
@@ -734,12 +746,22 @@ function NflDateQuery(){
     finally{setLoading(false);}
   }
   return <div className="report-card nfl-date-query">
-    <form onSubmit={query}>
-      <div><p className="kicker">Consulta administrativa</p><h4>Consultar BALLDONTLIE por fecha</h4><p>Disponible en cualquier momento. Muestra los partidos sin cambiar los resultados registrados. La fecha y la hora de los partidos corresponden a Ciudad Juárez.</p></div>
-      <label>Fecha del partido<input type="date" required value={date} disabled={loading} onChange={event=>{setDate(event.target.value);setResult(null);setError("");}}/></label>
-      <button type="submit" className="primary" disabled={loading||!date}>{loading?"Consultando…":"Consultar fecha"}</button>
+    <form onSubmit={query} className="nfl-query-form">
+      <div className="nfl-query-heading"><span className="nfl-provider-mark" aria-hidden="true">B</span><div><p className="kicker">Consulta administrativa</p><h4>Resultados NFL por fecha</h4><p>Consulta directa a BALLDONTLIE, sin modificar los marcadores guardados.</p></div></div>
+      <div className="nfl-query-controls">
+        <label><span>Fecha del partido</span><input type="date" required value={date} disabled={loading} onChange={event=>{setDate(event.target.value);setResult(null);setError("");}}/></label>
+        <button type="submit" className="primary" disabled={loading||!date}><span aria-hidden="true">{loading?"↻":"⌕"}</span>{loading?"Consultando…":"Consultar"}</button>
+      </div>
+      <div className="nfl-query-note"><span aria-hidden="true">i</span><p>Horarios de Ciudad Juárez. Esta consulta es únicamente informativa y no altera resultados, ganadores ni flyers.</p></div>
     </form>
-    {error&&<p role="alert">{error}</p>}
-    <div aria-live="polite">{result&&<><p><strong>{result.date}</strong> · {result.message}</p><p>Consultado: {new Date(result.queriedAt).toLocaleString("es-MX")}</p>{result.games.map(game=><p key={game.id}><strong>{game.visitor} {game.visitorScore??"—"} — {game.homeScore??"—"} {game.home}</strong> · {game.localTime} (Ciudad Juárez) · {game.status||"Estado no disponible"}</p>)}</>}</div>
+    {error&&<div className="nfl-query-error" role="alert"><span aria-hidden="true">!</span><div><strong>No fue posible completar la consulta</strong><p>{error}</p></div></div>}
+    <div className="nfl-query-results" aria-live="polite">{result&&<>
+      <div className="nfl-query-summary"><div><span>Fecha consultada</span><strong>{formatNflQueryDate(result.date)}</strong></div><div className="nfl-query-summary-meta"><span className="nfl-game-count">{result.games.length} {result.games.length===1?"partido":"partidos"}</span><time dateTime={result.queriedAt}>Actualizado {new Intl.DateTimeFormat("es-MX",{timeZone:"America/Ciudad_Juarez",hour:"2-digit",minute:"2-digit"}).format(new Date(result.queriedAt))}</time></div></div>
+      {result.games.length===0?<div className="nfl-query-empty"><span aria-hidden="true">✓</span><div><strong>Consulta completada</strong><p>No se encontraron partidos NFL para esta fecha.</p></div></div>:<div className="nfl-game-cards">{result.games.map(game=>{const visualState=nflQueryState(game.state,game.status);const hasScore=game.visitorScore!==null||game.homeScore!==null;return <article className={`nfl-game-card ${visualState.className}`} key={game.id}>
+        <div className="nfl-game-card-top"><span className={`nfl-query-status ${visualState.className}`}><i aria-hidden="true"/>{visualState.label}</span><span className="nfl-query-time"><b>{game.localTime}</b> h · Ciudad Juárez</span></div>
+        <div className="nfl-scoreboard"><div className="nfl-team visitor"><small>Visitante</small><strong>{game.visitor}</strong></div><div className="nfl-score"><b>{game.visitorScore??"—"}</b><span>—</span><b>{game.homeScore??"—"}</b></div><div className="nfl-team home"><small>Casa</small><strong>{game.home}</strong></div></div>
+        <div className="nfl-game-card-bottom"><span>{hasScore?"Marcador reportado por el proveedor":"Marcador aún no disponible"}</span><span>Juego #{game.id}</span></div>
+      </article>;})}</div>}
+    </>}</div>
   </div>;
 }

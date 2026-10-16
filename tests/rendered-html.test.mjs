@@ -223,6 +223,8 @@ test("NFL results automation is secure, idempotent and visibly tracked", async (
   assert.match(board, /nflSync:nflSyncResult\.results/);
   assert.match(page, /Resultado listo para enviar/);
   assert.match(page, /nflSyncLabel/);
+  assert.match(page, /nfl-game-cards/);
+  assert.match(page, /Marcador reportado por el proveedor/);
   assert.match(oidc, /EXPECTED_WORKFLOW=.*sync-nfl-results\.yml@refs\/heads\/main/);
   assert.match(oidc, /RSASSA-PKCS1-v1_5/);
   assert.match(endpoint, /verifyGitHubActionsToken/);
