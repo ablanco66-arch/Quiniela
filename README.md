@@ -110,3 +110,9 @@ El sitio expone la herramienta MCP `sync_nfl_results` para las ejecuciones progr
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+
+### Consulta manual por fecha
+
+Los administradores pueden consultar BALLDONTLIE desde **Juegos → Consultar BALLDONTLIE por fecha**. La fecha debe ser válida y usa el calendario del proveedor. Funciona fuera de la ventana automática y para fechas de otras temporadas. Muestra partidos, estados y marcadores; no modifica resultados, seguimiento ni flyers. Una respuesta sin partidos también confirma una consulta exitosa.
+
+La herramienta MCP `query_nfl_date` ofrece la misma consulta con `{ "date": "2026-10-12" }`, restringida al propietario autenticado. Usa el secreto de producción existente. La sincronización programada mantiene su ventana y reglas actuales.

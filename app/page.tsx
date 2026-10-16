@@ -497,6 +497,7 @@ function Games({season,squares,visitorDigits,homeDigits,gameResults,nflSync,me,s
   const selectedResultExists=gameResults.some((result)=>result.gameId===resultGameId);
   return <section className="content games-section"><div className="section-heading"><div><p className="kicker">Calendario oficial</p><h3>{season.games.length} lunes de emoción</h3></div><span className="year-pill">{season.name}</span></div>
     <div className="report-switch games-switch"><button className={gamesView==="calendar"?"active":""} onClick={()=>setGamesView("calendar")}>Juegos</button><button className={gamesView==="winners"?"active":""} onClick={()=>setGamesView("winners")}>Ganadores</button></div>
+    {me.role==="admin"&&<NflDateQuery/>}
     {gamesView==="calendar"&&<div className="games-list">{season.games.map((game,index)=>{const sync=nflSync.find((item)=>item.gameId===index+1);return <article className="game" key={`${game.date}-${game.visitor}-${index}`}><div className="game-number"><span>JUEGO</span><strong>{String(index+1).padStart(2,"0")}</strong></div><div className="game-date">{game.date}</div><div className="matchup"><div><small>VISITANTE</small><strong>{game.visitor}</strong></div><span>@</span><div><small>CASA</small><strong>{game.home}</strong></div></div>{sync?<span className={`nfl-sync-state ${sync.state}`} title={sync.lastError||sync.providerStatus}>{nflSyncLabel(sync.state)}</span>:<div className="monday">MNF</div>}</article>;})}</div>}
     {gamesView==="winners"&&<div className="winners-view">
       {me.role==="admin"&&<form className="report-card result-entry" onSubmit={async(event)=>{event.preventDefault();const result={gameId:resultGameId,visitorScore:Number(visitorScore),homeScore:Number(homeScore)};if(await onSaveGameResult(result.gameId,result.visitorScore,result.homeScore)){const winner=winnerFromResult(result);if(winner)await onGenerateWinnerFlyer(winner);}}}>
@@ -716,3 +717,29 @@ function activityIcon(action:string){ return action==="paid"?"$":action==="treas
 function activityText(item:Activity){ if(item.action==="paid")return `marcó como pagada la casilla ${item.squareId}`;if(item.action==="treasury")return `registró en Tesorería la casilla ${item.squareId}`;if(item.action==="reserved")return `reservó la casilla ${item.squareId} para ${item.details}`;if(item.action==="released")return `liberó la casilla ${item.squareId}`;if(item.action==="member_updated")return `actualizó el acceso de ${item.details}`;if(item.action==="member_removed")return `retiró el acceso de ${item.details}`;if(item.action==="numbers_updated")return "actualizó los números de juego";if(item.action==="game_result_updated")return `registró el resultado: ${item.details}`;if(item.action==="game_result_cleared")return `eliminó el resultado del ${item.details}`;if(item.action==="game_results_cleared")return `eliminó todos los marcadores: ${item.details}`;if(item.action==="season_updated")return `actualizó la temporada: ${item.details}`;if(item.action==="season_activated")return `activó la nueva temporada: ${item.details}`;return `actualizó la casilla ${item.squareId}`; }
 function formatNoteDate(value:string){ try{return new Intl.DateTimeFormat("es-MX",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}catch{return value;} }
 function formatDate(value:string){ try{return new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}catch{return value;} }
+
+function NflDateQuery(){
+  const [date,setDate]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const [result,setResult]=useState<{date:string;queriedAt:string;message:string;games:Array<{id:number;visitor:string;home:string;visitorScore:number|null;homeScore:number|null;status:string}>}|null>(null);
+  async function query(event:FormEvent){
+    event.preventDefault();setLoading(true);setError("");setResult(null);
+    try{
+      const response=await fetch("/api/board",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"nfl_query_date",date})});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||"No fue posible consultar BALLDONTLIE");
+      setResult(data);
+    }catch(error){setError(error instanceof Error?error.message:"No fue posible consultar BALLDONTLIE");}
+    finally{setLoading(false);}
+  }
+  return <div className="report-card nfl-date-query">
+    <form onSubmit={query}>
+      <div><p className="kicker">Consulta administrativa</p><h4>Consultar BALLDONTLIE por fecha</h4><p>Disponible en cualquier momento. Muestra los partidos sin cambiar los resultados registrados. La fecha corresponde al calendario del proveedor.</p></div>
+      <label>Fecha del partido<input type="date" required value={date} disabled={loading} onChange={event=>{setDate(event.target.value);setResult(null);setError("");}}/></label>
+      <button type="submit" className="primary" disabled={loading||!date}>{loading?"Consultando…":"Consultar fecha"}</button>
+    </form>
+    {error&&<p role="alert">{error}</p>}
+    <div aria-live="polite">{result&&<><p><strong>{result.date}</strong> · {result.message}</p><p>Consultado: {new Date(result.queriedAt).toLocaleString("es-MX")}</p>{result.games.map(game=><p key={game.id}><strong>{game.visitor} {game.visitorScore??"—"} — {game.homeScore??"—"} {game.home}</strong> · {game.status||"Estado no disponible"}</p>)}</>}</div>
+  </div>;
+}

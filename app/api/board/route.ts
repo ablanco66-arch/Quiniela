@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { queryNflDate, validateNflDate } from "../../../lib/nfl-query";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { ensureLocalAuthSchema, getLocalActor, hashPassword, normalizeUsername, validPassword, validUsername } from "../../lib/local-auth";
 
@@ -136,6 +137,12 @@ export async function PUT(request: Request) {
     const actor = await getActor(request);
     if (actor instanceof Response) return actor;
     const payload = await request.json() as Record<string, unknown>;
+
+    if(payload.action==="nfl_query_date"){
+      if(actor.role!=="admin")return Response.json({error:"Sólo administradores pueden consultar BALLDONTLIE"},{status:403});
+      try{validateNflDate(payload.date);}catch(error){return Response.json({error:error instanceof Error?error.message:"Fecha inválida"},{status:400});}
+      try{return Response.json(await queryNflDate(payload.date));}catch(error){return Response.json({error:error instanceof Error?error.message:"No fue posible consultar BALLDONTLIE"},{status:502});}
+    }
 
     if (payload.action === "season_save" || payload.action === "season_activate") {
       if (actor.role !== "admin") return forbidden();
