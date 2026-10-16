@@ -3,7 +3,7 @@ import { queryNflDate } from "../../lib/nfl-query";
 
 const SERVER_INFO={name:"quiniela-mnf-2026",version:"1.0.0"};
 const TOOLS=[
-  {name:"query_nfl_date",description:"Consulta partidos NFL en BALLDONTLIE para una fecha AAAA-MM-DD, incluso fuera de la ventana de seguimiento. Sólo lectura: no registra ni modifica resultados. La fecha usa el filtro de calendario del proveedor.",inputSchema:{type:"object",properties:{date:{type:"string",description:"Fecha de calendario del proveedor en formato AAAA-MM-DD"}},required:["date"],additionalProperties:false}},
+  {name:"query_nfl_date",description:"Consulta partidos NFL en BALLDONTLIE para una fecha AAAA-MM-DD, incluso fuera de la ventana de seguimiento. Sólo lectura: no registra ni modifica resultados. La fecha corresponde al día local de Ciudad Juárez.",inputSchema:{type:"object",properties:{date:{type:"string",description:"Fecha local de Ciudad Juárez en formato AAAA-MM-DD"}},required:["date"],additionalProperties:false}},
   {name:"sync_nfl_results",description:"Consulta BALLDONTLIE, confirma marcadores finales de los juegos de la quiniela y prepara los registros ganadores. Fuera de la ventana de seguimiento no realiza cambios.",inputSchema:{type:"object",properties:{},additionalProperties:false}},
 ];
 

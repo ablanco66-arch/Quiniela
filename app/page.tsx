@@ -722,7 +722,7 @@ function NflDateQuery(){
   const [date,setDate]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
-  const [result,setResult]=useState<{date:string;queriedAt:string;message:string;games:Array<{id:number;visitor:string;home:string;visitorScore:number|null;homeScore:number|null;status:string}>}|null>(null);
+  const [result,setResult]=useState<{date:string;queriedAt:string;message:string;games:Array<{id:number;visitor:string;home:string;visitorScore:number|null;homeScore:number|null;status:string;localTime:string}>}|null>(null);
   async function query(event:FormEvent){
     event.preventDefault();setLoading(true);setError("");setResult(null);
     try{
@@ -735,11 +735,11 @@ function NflDateQuery(){
   }
   return <div className="report-card nfl-date-query">
     <form onSubmit={query}>
-      <div><p className="kicker">Consulta administrativa</p><h4>Consultar BALLDONTLIE por fecha</h4><p>Disponible en cualquier momento. Muestra los partidos sin cambiar los resultados registrados. La fecha corresponde al calendario del proveedor.</p></div>
+      <div><p className="kicker">Consulta administrativa</p><h4>Consultar BALLDONTLIE por fecha</h4><p>Disponible en cualquier momento. Muestra los partidos sin cambiar los resultados registrados. La fecha y la hora de los partidos corresponden a Ciudad Juárez.</p></div>
       <label>Fecha del partido<input type="date" required value={date} disabled={loading} onChange={event=>{setDate(event.target.value);setResult(null);setError("");}}/></label>
       <button type="submit" className="primary" disabled={loading||!date}>{loading?"Consultando…":"Consultar fecha"}</button>
     </form>
     {error&&<p role="alert">{error}</p>}
-    <div aria-live="polite">{result&&<><p><strong>{result.date}</strong> · {result.message}</p><p>Consultado: {new Date(result.queriedAt).toLocaleString("es-MX")}</p>{result.games.map(game=><p key={game.id}><strong>{game.visitor} {game.visitorScore??"—"} — {game.homeScore??"—"} {game.home}</strong> · {game.status||"Estado no disponible"}</p>)}</>}</div>
+    <div aria-live="polite">{result&&<><p><strong>{result.date}</strong> · {result.message}</p><p>Consultado: {new Date(result.queriedAt).toLocaleString("es-MX")}</p>{result.games.map(game=><p key={game.id}><strong>{game.visitor} {game.visitorScore??"—"} — {game.homeScore??"—"} {game.home}</strong> · {game.localTime} (Ciudad Juárez) · {game.status||"Estado no disponible"}</p>)}</>}</div>
   </div>;
 }
