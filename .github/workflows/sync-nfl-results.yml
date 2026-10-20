@@ -9,6 +9,8 @@ on:
       - "lib/github-oidc.ts"
       - "lib/nfl-results.ts"
   schedule:
+    # Prueba temporal: martes 00:36 MDT (06:36 UTC).
+    - cron: "36 6 * * 2"
     # Cubre 22:00–04:59 en Ciudad Juárez tanto en horario de verano como de invierno.
     - cron: "*/5 4-11 * * 2"
   workflow_dispatch:
