@@ -9,8 +9,9 @@ on:
       - "lib/github-oidc.ts"
       - "lib/nfl-results.ts"
   schedule:
-    # Cubre 22:00–04:59 en Ciudad Juárez tanto en horario de verano como de invierno.
-    - cron: "*/5 4-11 * * 2"
+    # 22:07 de Ciudad Juárez: 04:07 UTC durante MDT y 05:07 UTC durante MST.
+    # La ejecución fuera de ventana espera hasta que ésta abra.
+    - cron: "7 4,5 * * 2"
   workflow_dispatch:
 
 permissions:
@@ -24,7 +25,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 355
     steps:
       - name: Obtener credencial de ejecución
         id: oidc
@@ -37,12 +38,65 @@ jobs:
           test -n "${token}" && test "${token}" != "null"
           echo "::add-mask::${token}"
           echo "token=${token}" >> "${GITHUB_OUTPUT}"
-      - name: Revisar marcadores de la quiniela
+
+      - name: Revisar marcadores hasta confirmarlos
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
         run: |
-          curl --fail-with-body --silent --show-error \
-            -X POST \
-            -H "Authorization: Bearer ${OIDC_TOKEN}" \
-            -H "Content-Type: application/json" \
-            https://quiniela-mnf-2026.ablanco66.chatgpt.site/api/automation/nfl-results
+          set -u
+
+          max_attempts=70
+          retry_seconds=300
+
+          for attempt in $(seq 1 "${max_attempts}"); do
+            echo "::group::Consulta ${attempt} de ${max_attempts}"
+
+            response=""
+            curl_status=0
+            response="$(curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Authorization: Bearer ${OIDC_TOKEN}" \
+              -H "Content-Type: application/json" \
+              https://quiniela-mnf-2026.ablanco66.chatgpt.site/api/automation/nfl-results)" || curl_status=$?
+
+            if [ "${curl_status}" -ne 0 ]; then
+              echo "La consulta falló con código curl ${curl_status}; se reintentará."
+              done_sync=0
+            elif ! jq -e . >/dev/null 2>&1 <<<"${response}"; then
+              echo "La respuesta no contiene JSON válido; se reintentará."
+              printf '%s\n' "${response}"
+              done_sync=0
+            else
+              jq . <<<"${response}"
+
+              status="$(jq -r '.status // "error"' <<<"${response}")"
+              pending="$(jq -r '.pending // 0' <<<"${response}")"
+              awaiting="$(jq -r '.awaitingConfirmation // 0' <<<"${response}")"
+              errors="$(jq -r '.errors // 0' <<<"${response}")"
+
+              if [ "${status}" = "checked" ] &&
+                 [ "${pending}" -eq 0 ] &&
+                 [ "${awaiting}" -eq 0 ] &&
+                 [ "${errors}" -eq 0 ]; then
+                done_sync=1
+              else
+                done_sync=0
+              fi
+            fi
+
+            echo "::endgroup::"
+
+            if [ "${done_sync}" -eq 1 ]; then
+              echo "Sincronización concluida: no quedan resultados pendientes."
+              exit 0
+            fi
+
+            if [ "${attempt}" -lt "${max_attempts}" ]; then
+              echo "Próxima consulta en 5 minutos."
+              sleep "${retry_seconds}"
+            fi
+          done
+
+          echo "No fue posible confirmar todos los resultados dentro de la ventana de seguimiento."
+          exit 1
