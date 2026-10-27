@@ -150,6 +150,8 @@ test("games and winners are combined in one Games surface", async () => {
   assert.match(page, /Flyer ES/);
   assert.match(page, /Flyer EN/);
   assert.match(page, /className="report-card result-entry game-result-entry"/);
+  assert.equal((page.match(/className="matchup-score"/g) ?? []).length, 2);
+  assert.doesNotMatch(page, /className="game-final-score"/);
 });
 
 test("unified games keep the Games visual language and winner details", async () => {
@@ -157,9 +159,10 @@ test("unified games keep the Games visual language and winner details", async ()
 
   assert.match(styles, /\.unified-game \{[^}]*grid-template-rows/);
   assert.match(styles, /\.game-outcome \{[^}]*grid-column:1\/-1/);
-  assert.match(styles, /\.game-final-score strong \{[^}]*grid-template-columns/);
+  assert.match(styles, /\.matchup-score \{[^}]*background:var\(--navy\)/);
+  assert.match(styles, /\.game-outcome \{ grid-template-columns:170px minmax\(190px,1fr\) auto/);
   assert.match(styles, /\.game-winning-square>div>strong/);
-  assert.match(styles, /\.game-winner-tools/);
+  assert.match(styles, /\.game-winner-tools \{ display:flex/);
 });
 
 test("member summary sorts every column and detail keeps square fixed", async () => {
