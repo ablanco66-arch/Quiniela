@@ -493,13 +493,11 @@ function Games({season,squares,visitorDigits,homeDigits,gameResults,nflSync,me,s
   const winnerRows=gameResults.map(winnerFromResult).filter((winner):winner is WinnerRow=>Boolean(winner));
   const resultByGameId=new Map(gameResults.map((result)=>[result.gameId,result]));
   const winnerByGameId=new Map(winnerRows.map((winner)=>[winner.result.gameId,winner]));
-  const readyCount=nflSync.filter((item)=>item.state==="confirmed"&&item.flyersReady).length;
   const selectedResultGame=season.games[resultGameId-1];
   const selectedResultExists=gameResults.some((result)=>result.gameId===resultGameId);
   const editResult=(gameId:number)=>{setResultGameId(gameId);requestAnimationFrame(()=>document.querySelector(".game-result-entry")?.scrollIntoView({behavior:"smooth",block:"center"}));};
   return <section className="content games-section"><div className="section-heading"><div><p className="kicker">Calendario oficial</p><h3>{season.games.length} lunes de emoción</h3></div><span className="year-pill">{season.name}</span></div>
     {me.role==="admin"&&<NflDateQuery/>}
-    {readyCount>0&&<div className="results-ready games-ready" role="status"><span>✓</span><div><strong>{readyCount===1?"Resultado listo para enviar":"Resultados listos para enviar"}</strong><p>Los marcadores fueron confirmados automáticamente. Los flyers ES y EN están disponibles en cada juego.</p></div><b>{winnerRows.length} de {season.games.length}</b></div>}
     {me.role==="admin"&&<form className="report-card result-entry game-result-entry" onSubmit={async(event)=>{event.preventDefault();const result={gameId:resultGameId,visitorScore:Number(visitorScore),homeScore:Number(homeScore)};if(await onSaveGameResult(result.gameId,result.visitorScore,result.homeScore)){const winner=winnerFromResult(result);if(winner)await onGenerateWinnerFlyer(winner);}}}>
       <div><p className="kicker">Captura administrativa</p><h4>Registrar resultado final</h4><p>Incluye el marcador después de tiempos extras. Al guardar, se generará el flier del ganador.</p></div>
       <label>Juego<select value={resultGameId} onChange={(event)=>setResultGameId(Number(event.target.value))}>{season.games.map((game,index)=><option key={index+1} value={index+1}>{String(index+1).padStart(2,"0")} · {gameDateLabel(index+1,season.games,season.name)} · {game.visitor} vs {game.home}</option>)}</select></label>

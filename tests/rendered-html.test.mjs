@@ -152,6 +152,7 @@ test("games and winners are combined in one Games surface", async () => {
   assert.match(page, /className="report-card result-entry game-result-entry"/);
   assert.equal((page.match(/className="matchup-score"/g) ?? []).length, 2);
   assert.doesNotMatch(page, /className="game-final-score"/);
+  assert.doesNotMatch(page, /Resultados? listos? para enviar|results-ready|games-ready/);
 });
 
 test("unified games keep the Games visual language and winner details", async () => {
@@ -227,7 +228,7 @@ test("NFL results automation is secure, idempotent and visibly tracked", async (
   assert.match(schema, /nflResultTracking/);
   assert.match(migration, /CREATE TABLE `nfl_result_tracking`/);
   assert.match(board, /nflSync:nflSyncResult\.results/);
-  assert.match(page, /Resultado listo para enviar/);
+  assert.doesNotMatch(page, /Resultados? listos? para enviar/);
   assert.match(page, /nflSyncLabel/);
   assert.match(page, /nfl-game-cards/);
   assert.match(page, /Marcador reportado por el proveedor/);
