@@ -140,23 +140,26 @@ test("winner flyer is available in Spanish and English", async () => {
   assert.match(styles, /\.winner-flyer-button-en/);
 });
 
-test("winners tab is located in the Games section", async () => {
+test("games and winners are combined in one Games surface", async () => {
   const page = await read("app/page.tsx");
 
-  assert.match(page, /function Games\([\s\S]*useState<"calendar"\|"winners">\("calendar"\)/);
-  assert.match(page, /gamesView==="calendar"[\s\S]*>Juegos<\/button><button[\s\S]*gamesView==="winners"[\s\S]*>Ganadores<\/button>/);
-  assert.match(page, /gamesView==="winners"&&<div className="winners-view">/);
-  assert.doesNotMatch(page, /reportView==="winners"/);
+  assert.doesNotMatch(page, /gamesView|games-switch/);
+  assert.match(page, /className="games-list unified-games-list"/);
+  assert.match(page, /className="game-outcome"/);
+  assert.match(page, /CASILLA GANADORA/);
+  assert.match(page, /Flyer ES/);
+  assert.match(page, /Flyer EN/);
+  assert.match(page, /className="report-card result-entry game-result-entry"/);
 });
 
-test("winner report uses optimized fixed column widths", async () => {
+test("unified games keep the Games visual language and winner details", async () => {
   const styles = await read("app/globals.css");
 
-  assert.match(styles, /\.winners-table \{[^}]*min-width:1080px;table-layout:fixed/);
-  assert.match(styles, /\.winners-table th:nth-child\(5\) \{ width:22%/);
-  assert.match(styles, /\.winners-table th:nth-child\(8\) \{ width:15%/);
-  assert.match(styles, /\.winners-table th:nth-child\(2\) \{ width:6%/);
-  assert.match(styles, /\.final-score \{[^}]*min-width:0/);
+  assert.match(styles, /\.unified-game \{[^}]*grid-template-rows/);
+  assert.match(styles, /\.game-outcome \{[^}]*grid-column:1\/-1/);
+  assert.match(styles, /\.game-final-score strong \{[^}]*grid-template-columns/);
+  assert.match(styles, /\.game-winning-square>div>strong/);
+  assert.match(styles, /\.game-winner-tools/);
 });
 
 test("member summary sorts every column and detail keeps square fixed", async () => {
@@ -228,7 +231,9 @@ test("NFL results automation is secure, idempotent and visibly tracked", async (
   assert.match(oidc, /EXPECTED_WORKFLOW=.*sync-nfl-results\.yml@refs\/heads\/main/);
   assert.match(oidc, /RSASSA-PKCS1-v1_5/);
   assert.match(endpoint, /verifyGitHubActionsToken/);
-  assert.match(workflow, /cron: "\*\/5 4-11 \* \* 2"/);
+  assert.match(workflow, /cron: "17 4,5,6 \* \* 2"/);
+  assert.match(workflow, /--retry 3/);
+  assert.doesNotMatch(workflow, /sleep "\$\{retry_seconds\}"/);
   assert.match(workflow, /push:[\s\S]*branches: \[main\]/);
   assert.match(workflow, /id-token: write/);
   assert.doesNotMatch(workflow, /BALLDONTLIE_API_KEY/);
