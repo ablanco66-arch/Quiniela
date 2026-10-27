@@ -160,7 +160,7 @@ test("unified games keep the Games visual language and winner details", async ()
   assert.match(styles, /\.unified-game \{[^}]*grid-template-rows/);
   assert.match(styles, /\.game-outcome \{[^}]*grid-column:1\/-1/);
   assert.match(styles, /\.matchup-score \{[^}]*background:var\(--navy\)/);
-  assert.match(styles, /\.game-outcome \{ grid-template-columns:170px minmax\(190px,1fr\) auto/);
+  assert.match(styles, /\.game-outcome \{ grid-template-columns:170px minmax\(190px,260px\) auto;justify-content:end/);
   assert.match(styles, /\.game-winning-square>div>strong/);
   assert.match(styles, /\.game-winner-tools \{ display:flex/);
 });
